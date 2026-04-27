@@ -11,9 +11,35 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Search, ExternalLink, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight } from "lucide-react"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+  Search,
+  ExternalLink,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  ChevronLeft,
+  ChevronRight,
+  Linkedin,
+  FileText,
+  Link2,
+  Copy,
+  Check,
+  MapPin,
+  Briefcase,
+  DollarSign,
+  Wrench,
+  Building2,
+  Sparkles,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
-import Link from "next/link"
 
 /* ── Label maps ──────────────────────────────────────────── */
 
@@ -125,19 +151,124 @@ function PillList({
   )
 }
 
-function LinkIcon({ url, label }: { url: string | null; label: string }) {
-  if (!url) return null
+function FullPillList({
+  items,
+  map,
+}: {
+  items: string[]
+  map: Record<string, string>
+}) {
+  if (!items || items.length === 0) return <span className="text-[#94a3b8] text-sm">Sin información</span>
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {items.map((item) => (
+        <span
+          key={item}
+          className="px-2.5 py-1 rounded-full text-xs bg-[#86EFAC]/15 text-[#86EFAC] border border-[#86EFAC]/25"
+        >
+          {map[item] || item}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function ActionButton({
+  href,
+  icon: Icon,
+  label,
+  variant = "default",
+}: {
+  href: string | null
+  icon: any
+  label: string
+  variant?: "default" | "primary"
+}) {
+  if (!href) {
+    return (
+      <span
+        className="inline-flex items-center justify-center size-8 rounded-lg bg-[#1a2340]/40 text-[#94a3b8]/30 cursor-not-allowed"
+        title={`${label} no disponible`}
+      >
+        <Icon className="size-3.5" />
+      </span>
+    )
+  }
+
   return (
     <a
-      href={url}
+      href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 text-[11px] text-[#86EFAC] hover:text-[#86EFAC]/80 transition-colors whitespace-nowrap"
+      className={`inline-flex items-center justify-center size-8 rounded-lg transition-all ${
+        variant === "primary"
+          ? "bg-[#86EFAC]/15 text-[#86EFAC] hover:bg-[#86EFAC]/25 border border-[#86EFAC]/20"
+          : "bg-[#1e3a5f]/50 text-[#C7D2FE] hover:bg-[#1e3a5f] hover:text-white border border-[#1e3a5f]"
+      }`}
       title={label}
     >
-      {label}
-      <ExternalLink className="size-3" />
+      <Icon className="size-3.5" />
     </a>
+  )
+}
+
+function CopyProfileButton({ token }: { token: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const url = `${window.location.origin}/perfil/${token}`
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="inline-flex items-center justify-center size-8 rounded-lg transition-all bg-[#86EFAC]/15 text-[#86EFAC] hover:bg-[#86EFAC]/25 border border-[#86EFAC]/20"
+      title="Copiar link de perfil"
+    >
+      {copied ? <Check className="size-3.5" /> : <Link2 className="size-3.5" />}
+    </button>
+  )
+}
+
+/* ── Sidebar detail section ──────────────────────────────── */
+
+function DetailSection({
+  icon: Icon,
+  title,
+  children,
+}: {
+  icon: any
+  title: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="space-y-2.5">
+      <div className="flex items-center gap-2">
+        <div className="flex items-center justify-center size-6 rounded-md bg-[#86EFAC]/10">
+          <Icon className="size-3.5 text-[#86EFAC]" />
+        </div>
+        <span className="text-xs uppercase tracking-wider text-[#C7D2FE] font-semibold">
+          {title}
+        </span>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+  if (!value) return null
+  return (
+    <div className="flex justify-between items-start gap-4">
+      <span className="text-[#94a3b8] text-sm shrink-0">{label}</span>
+      <span className="text-white text-sm text-right">{value}</span>
+    </div>
   )
 }
 
@@ -159,6 +290,8 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("first_name")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
   const [page, setPage] = useState(0)
+  const [selectedMaker, setSelectedMaker] = useState<any | null>(null)
+  const [sheetOpen, setSheetOpen] = useState(false)
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -169,6 +302,11 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
       setSortDir("asc")
     }
     setPage(0)
+  }
+
+  const openDetail = (maker: any) => {
+    setSelectedMaker(maker)
+    setSheetOpen(true)
   }
 
   const SortIcon = ({ columnKey }: { columnKey: string }) => {
@@ -211,24 +349,20 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
       let aVal = a[sortKey]
       let bVal = b[sortKey]
 
-      // Handle nulls
       if (aVal == null && bVal == null) return 0
       if (aVal == null) return 1
       if (bVal == null) return -1
 
-      // Arrays: sort by length
       if (Array.isArray(aVal) && Array.isArray(bVal)) {
         return sortDir === "asc"
           ? aVal.length - bVal.length
           : bVal.length - aVal.length
       }
 
-      // Numbers
       if (typeof aVal === "number" && typeof bVal === "number") {
         return sortDir === "asc" ? aVal - bVal : bVal - aVal
       }
 
-      // Strings
       aVal = String(aVal).toLowerCase()
       bVal = String(bVal).toLowerCase()
       if (aVal < bVal) return sortDir === "asc" ? -1 : 1
@@ -244,283 +378,382 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
   )
 
   const formatSalary = (min: number | null, max: number | null, currency: string) => {
-    if (!min && !max) return <span className="text-[#94a3b8]">—</span>
+    if (!min && !max) return null
     const fmt = (v: number) => v.toLocaleString()
-    return (
-      <span className="text-white text-xs whitespace-nowrap">
-        {currency || "USD"} {min ? fmt(min) : "?"} – {max ? fmt(max) : "?"}
-      </span>
-    )
+    return `${currency || "USD"} ${min ? fmt(min) : "?"} – ${max ? fmt(max) : "?"}`
   }
 
-  const columns: {
-    key: string
-    label: string
-    sortable?: boolean
-  }[] = [
+  const columns: { key: string; label: string; sortable?: boolean }[] = [
     { key: "first_name", label: "Nombre", sortable: true },
     { key: "email", label: "Email", sortable: true },
     { key: "search_status", label: "Estado", sortable: true },
-    { key: "current_role", label: "Rol actual", sortable: true },
     { key: "seniority", label: "Seniority", sortable: true },
     { key: "roles", label: "Roles de interés" },
-    { key: "industries", label: "Industrias" },
-    { key: "tools_skills", label: "Skills" },
-    { key: "location_city", label: "Ciudad", sortable: true },
-    { key: "full_time", label: "Full-time", sortable: true },
-    { key: "company_type", label: "Tipo empresa" },
-    { key: "salary", label: "Salario" },
-    { key: "links", label: "Links" },
-    { key: "strengths", label: "Fortalezas" },
-    { key: "updated_at", label: "Actualizado", sortable: true },
+    { key: "actions", label: "Acciones" },
   ]
 
   return (
-    <div className="space-y-4">
-      {/* Search bar */}
-      <Card className="border-[#1e3a5f] bg-[#1a2340]/60 backdrop-blur-sm">
-        <CardContent className="py-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#94a3b8]" />
-            <Input
-              id="search-candidates"
-              placeholder="Buscar por nombre, rol, skill, ciudad..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value)
-                setPage(0)
-              }}
-              className="pl-10 bg-[#0F1729] border-[#1e3a5f] text-white placeholder:text-[#94a3b8] h-11 focus:border-[#86EFAC] focus:ring-[#86EFAC]/20"
-            />
-          </div>
-        </CardContent>
-      </Card>
+    <>
+      <div className="space-y-4">
+        {/* Search bar */}
+        <Card className="border-[#1e3a5f] bg-[#1a2340]/60 backdrop-blur-sm">
+          <CardContent className="py-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#94a3b8]" />
+              <Input
+                id="search-candidates"
+                placeholder="Buscar por nombre, rol, skill, ciudad..."
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value)
+                  setPage(0)
+                }}
+                className="pl-10 bg-[#0F1729] border-[#1e3a5f] text-white placeholder:text-[#94a3b8] h-11 focus:border-[#86EFAC] focus:ring-[#86EFAC]/20"
+              />
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Table */}
-      <Card className="border-[#1e3a5f] bg-[#1a2340]/60 backdrop-blur-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-[#1e3a5f] hover:bg-transparent">
-                {columns.map((col) => (
-                  <TableHead
-                    key={col.key}
-                    className={`text-[#C7D2FE] text-xs uppercase tracking-wider font-semibold bg-[#0F1729]/60 ${
-                      col.sortable ? "cursor-pointer select-none hover:text-[#86EFAC] transition-colors" : ""
-                    }`}
-                    onClick={col.sortable ? () => handleSort(col.key) : undefined}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      {col.label}
-                      {col.sortable && <SortIcon columnKey={col.key} />}
-                    </div>
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginated.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={columns.length}
-                    className="text-center py-12 text-[#94a3b8]"
-                  >
-                    {search
-                      ? "No se encontraron candidatos con esa búsqueda"
-                      : "No hay candidatos registrados"}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                paginated.map((maker) => (
-                  <TableRow
-                    key={maker.id}
-                    className="border-[#1e3a5f]/50 hover:bg-[#86EFAC]/5 transition-colors group"
-                  >
-                    {/* Name */}
-                    <TableCell>
-                      <Link
-                        href={`/perfil/${maker.magic_link_token}`}
-                        className="font-semibold text-white group-hover:text-[#86EFAC] transition-colors whitespace-nowrap"
-                      >
-                        {[maker.first_name, maker.last_name]
-                          .filter(Boolean)
-                          .join(" ") || "—"}
-                      </Link>
-                    </TableCell>
-
-                    {/* Email */}
-                    <TableCell>
-                      <span className="text-[#C7D2FE] text-sm">
-                        {maker.email || "—"}
-                      </span>
-                    </TableCell>
-
-                    {/* Status */}
-                    <TableCell>
-                      {maker.search_status ? (
-                        <StatusBadge status={maker.search_status} />
-                      ) : (
-                        <span className="text-[#94a3b8]">—</span>
-                      )}
-                    </TableCell>
-
-                    {/* Current Role */}
-                    <TableCell>
-                      <span className="text-white text-sm whitespace-nowrap">
-                        {maker.current_role || <span className="text-[#94a3b8]">—</span>}
-                      </span>
-                    </TableCell>
-
-                    {/* Seniority */}
-                    <TableCell>
-                      {maker.seniority ? (
-                        <span className="px-2.5 py-1 rounded-full text-xs bg-[#86EFAC]/10 text-[#86EFAC] border border-[#86EFAC]/20 whitespace-nowrap">
-                          {SENIORITY_MAP[maker.seniority] || maker.seniority}
-                        </span>
-                      ) : (
-                        <span className="text-[#94a3b8]">—</span>
-                      )}
-                    </TableCell>
-
-                    {/* Roles */}
-                    <TableCell>
-                      <PillList items={maker.roles || []} map={ROLES_MAP} />
-                    </TableCell>
-
-                    {/* Industries */}
-                    <TableCell>
-                      <PillList items={maker.industries || []} map={INDUSTRIES_MAP} />
-                    </TableCell>
-
-                    {/* Skills */}
-                    <TableCell>
-                      <PillList
-                        items={maker.tools_skills || []}
-                        map={TOOLS_MAP}
-                        max={2}
-                      />
-                    </TableCell>
-
-                    {/* City */}
-                    <TableCell>
-                      <span className="text-white text-sm whitespace-nowrap">
-                        {maker.location_city || <span className="text-[#94a3b8]">—</span>}
-                      </span>
-                    </TableCell>
-
-                    {/* Full-time */}
-                    <TableCell>
-                      <span
-                        className={`text-xs font-medium ${
-                          maker.full_time ? "text-[#86EFAC]" : "text-[#FCA5A5]"
-                        }`}
-                      >
-                        {maker.full_time == null
-                          ? "—"
-                          : maker.full_time
-                          ? "Sí"
-                          : "No"}
-                      </span>
-                    </TableCell>
-
-                    {/* Company Type */}
-                    <TableCell>
-                      <PillList
-                        items={maker.company_type || []}
-                        map={COMPANY_TYPE_MAP}
-                        max={2}
-                      />
-                    </TableCell>
-
-                    {/* Salary */}
-                    <TableCell>
-                      {formatSalary(
-                        maker.salary_min,
-                        maker.salary_max,
-                        maker.salary_currency
-                      )}
-                    </TableCell>
-
-                    {/* Links */}
-                    <TableCell>
-                      <div className="flex flex-col gap-1">
-                        <LinkIcon url={maker.linkedin_url} label="LinkedIn" />
-                        <LinkIcon url={maker.portfolio_url} label="Portfolio" />
-                        <LinkIcon url={maker.github_url} label="GitHub" />
-                        <LinkIcon url={maker.cv_url} label="CV" />
+        {/* Table */}
+        <Card className="border-[#1e3a5f] bg-[#1a2340]/60 backdrop-blur-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-[#1e3a5f] hover:bg-transparent">
+                  {columns.map((col) => (
+                    <TableHead
+                      key={col.key}
+                      className={`text-[#C7D2FE] text-xs uppercase tracking-wider font-semibold bg-[#0F1729]/60 ${
+                        col.sortable
+                          ? "cursor-pointer select-none hover:text-[#86EFAC] transition-colors"
+                          : ""
+                      }`}
+                      onClick={col.sortable ? () => handleSort(col.key) : undefined}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        {col.label}
+                        {col.sortable && <SortIcon columnKey={col.key} />}
                       </div>
-                    </TableCell>
-
-                    {/* Strengths */}
-                    <TableCell>
-                      <span
-                        className="text-[#C7D2FE] text-xs max-w-[200px] truncate block"
-                        title={maker.strengths || ""}
-                      >
-                        {maker.strengths || <span className="text-[#94a3b8]">—</span>}
-                      </span>
-                    </TableCell>
-
-                    {/* Updated at */}
-                    <TableCell>
-                      <span className="text-[#94a3b8] text-xs whitespace-nowrap">
-                        {maker.updated_at
-                          ? new Date(maker.updated_at).toLocaleDateString("es-ES", {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                            })
-                          : "—"}
-                      </span>
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paginated.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={columns.length}
+                      className="text-center py-12 text-[#94a3b8]"
+                    >
+                      {search
+                        ? "No se encontraron candidatos con esa búsqueda"
+                        : "No hay candidatos registrados"}
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                ) : (
+                  paginated.map((maker) => (
+                    <TableRow
+                      key={maker.id}
+                      className="border-[#1e3a5f]/50 hover:bg-[#86EFAC]/5 transition-colors group cursor-pointer"
+                      onClick={() => openDetail(maker)}
+                    >
+                      {/* Name */}
+                      <TableCell>
+                        <span className="font-semibold text-white group-hover:text-[#86EFAC] transition-colors whitespace-nowrap">
+                          {[maker.first_name, maker.last_name]
+                            .filter(Boolean)
+                            .join(" ") || "—"}
+                        </span>
+                      </TableCell>
 
-        {/* Pagination */}
-        {sorted.length > ROWS_PER_PAGE && (
-          <div className="flex items-center justify-between px-6 py-4 border-t border-[#1e3a5f]">
-            <p className="text-[#94a3b8] text-sm">
-              Mostrando {page * ROWS_PER_PAGE + 1}–
-              {Math.min((page + 1) * ROWS_PER_PAGE, sorted.length)} de{" "}
-              {sorted.length}
-            </p>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page === 0}
-                className="border-[#1e3a5f] text-[#C7D2FE] hover:bg-[#86EFAC]/10 hover:border-[#86EFAC] disabled:opacity-30"
-              >
-                <ChevronLeft className="size-4" />
-              </Button>
-              <span className="text-[#C7D2FE] text-sm min-w-[80px] text-center">
-                {page + 1} / {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                disabled={page === totalPages - 1}
-                className="border-[#1e3a5f] text-[#C7D2FE] hover:bg-[#86EFAC]/10 hover:border-[#86EFAC] disabled:opacity-30"
-              >
-                <ChevronRight className="size-4" />
-              </Button>
-            </div>
+                      {/* Email */}
+                      <TableCell>
+                        <span className="text-[#C7D2FE] text-sm">
+                          {maker.email || "—"}
+                        </span>
+                      </TableCell>
+
+                      {/* Status */}
+                      <TableCell>
+                        {maker.search_status ? (
+                          <StatusBadge status={maker.search_status} />
+                        ) : (
+                          <span className="text-[#94a3b8]">—</span>
+                        )}
+                      </TableCell>
+
+                      {/* Seniority */}
+                      <TableCell>
+                        {maker.seniority ? (
+                          <span className="px-2.5 py-1 rounded-full text-xs bg-[#86EFAC]/10 text-[#86EFAC] border border-[#86EFAC]/20 whitespace-nowrap">
+                            {SENIORITY_MAP[maker.seniority] || maker.seniority}
+                          </span>
+                        ) : (
+                          <span className="text-[#94a3b8]">—</span>
+                        )}
+                      </TableCell>
+
+                      {/* Roles */}
+                      <TableCell>
+                        <PillList items={maker.roles || []} map={ROLES_MAP} />
+                      </TableCell>
+
+                      {/* Action Buttons */}
+                      <TableCell>
+                        <div
+                          className="flex items-center gap-1.5"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <ActionButton
+                            href={maker.linkedin_url}
+                            icon={Linkedin}
+                            label="LinkedIn"
+                          />
+                          <ActionButton
+                            href={maker.cv_url}
+                            icon={FileText}
+                            label="CV"
+                          />
+                          <CopyProfileButton token={maker.magic_link_token} />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
           </div>
-        )}
-      </Card>
 
-      {/* Results count */}
-      <p className="text-[#94a3b8] text-xs text-center">
-        {search
-          ? `${sorted.length} resultado${sorted.length !== 1 ? "s" : ""} encontrado${sorted.length !== 1 ? "s" : ""}`
-          : `${makers.length} candidato${makers.length !== 1 ? "s" : ""} total${makers.length !== 1 ? "es" : ""}`}
-      </p>
-    </div>
+          {/* Pagination */}
+          {sorted.length > ROWS_PER_PAGE && (
+            <div className="flex items-center justify-between px-6 py-4 border-t border-[#1e3a5f]">
+              <p className="text-[#94a3b8] text-sm">
+                Mostrando {page * ROWS_PER_PAGE + 1}–
+                {Math.min((page + 1) * ROWS_PER_PAGE, sorted.length)} de{" "}
+                {sorted.length}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="border-[#1e3a5f] text-[#C7D2FE] hover:bg-[#86EFAC]/10 hover:border-[#86EFAC] disabled:opacity-30"
+                >
+                  <ChevronLeft className="size-4" />
+                </Button>
+                <span className="text-[#C7D2FE] text-sm min-w-[80px] text-center">
+                  {page + 1} / {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setPage((p) => Math.min(totalPages - 1, p + 1))
+                  }
+                  disabled={page === totalPages - 1}
+                  className="border-[#1e3a5f] text-[#C7D2FE] hover:bg-[#86EFAC]/10 hover:border-[#86EFAC] disabled:opacity-30"
+                >
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </Card>
+
+        {/* Results count */}
+        <p className="text-[#94a3b8] text-xs text-center">
+          {search
+            ? `${sorted.length} resultado${sorted.length !== 1 ? "s" : ""} encontrado${sorted.length !== 1 ? "s" : ""}`
+            : `${makers.length} candidato${makers.length !== 1 ? "s" : ""} total${makers.length !== 1 ? "es" : ""}`}
+        </p>
+      </div>
+
+      {/* ── Detail Sidebar ──────────────────────────────────── */}
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent
+          side="right"
+          className="bg-[#0F1729] border-[#1e3a5f] w-full sm:max-w-md p-0"
+        >
+          {selectedMaker && (
+            <>
+              <SheetHeader className="p-6 pb-4 border-b border-[#1e3a5f]">
+                <SheetTitle className="text-2xl font-extrabold text-white">
+                  {[selectedMaker.first_name, selectedMaker.last_name]
+                    .filter(Boolean)
+                    .join(" ") || "Maker"}
+                </SheetTitle>
+                <SheetDescription className="text-[#C7D2FE]">
+                  {selectedMaker.email || "Sin email"}
+                </SheetDescription>
+
+                {/* Status */}
+                {selectedMaker.search_status && (
+                  <div className="mt-2">
+                    <StatusBadge status={selectedMaker.search_status} />
+                  </div>
+                )}
+
+                {/* Quick action buttons */}
+                <div className="flex items-center gap-2 mt-4">
+                  {selectedMaker.linkedin_url && (
+                    <a
+                      href={selectedMaker.linkedin_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#1e3a5f]/50 text-[#C7D2FE] hover:bg-[#1e3a5f] hover:text-white transition-all border border-[#1e3a5f]"
+                    >
+                      <Linkedin className="size-3.5" />
+                      LinkedIn
+                      <ExternalLink className="size-3" />
+                    </a>
+                  )}
+                  {selectedMaker.cv_url && (
+                    <a
+                      href={selectedMaker.cv_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#1e3a5f]/50 text-[#C7D2FE] hover:bg-[#1e3a5f] hover:text-white transition-all border border-[#1e3a5f]"
+                    >
+                      <FileText className="size-3.5" />
+                      CV
+                      <ExternalLink className="size-3" />
+                    </a>
+                  )}
+                  {selectedMaker.portfolio_url && (
+                    <a
+                      href={selectedMaker.portfolio_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#1e3a5f]/50 text-[#C7D2FE] hover:bg-[#1e3a5f] hover:text-white transition-all border border-[#1e3a5f]"
+                    >
+                      <Link2 className="size-3.5" />
+                      Portfolio
+                      <ExternalLink className="size-3" />
+                    </a>
+                  )}
+                  {selectedMaker.github_url && (
+                    <a
+                      href={selectedMaker.github_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#1e3a5f]/50 text-[#C7D2FE] hover:bg-[#1e3a5f] hover:text-white transition-all border border-[#1e3a5f]"
+                    >
+                      <Link2 className="size-3.5" />
+                      GitHub
+                      <ExternalLink className="size-3" />
+                    </a>
+                  )}
+                </div>
+              </SheetHeader>
+
+              <ScrollArea className="flex-1 overflow-y-auto">
+                <div className="p-6 space-y-6">
+                  {/* Perfil profesional */}
+                  <DetailSection icon={Briefcase} title="Perfil profesional">
+                    <div className="space-y-2 bg-[#1a2340]/60 rounded-xl p-4 border border-[#1e3a5f]/50">
+                      <InfoRow label="Rol actual" value={selectedMaker.current_role} />
+                      <InfoRow
+                        label="Seniority"
+                        value={
+                          selectedMaker.seniority
+                            ? SENIORITY_MAP[selectedMaker.seniority] || selectedMaker.seniority
+                            : null
+                        }
+                      />
+                      <InfoRow
+                        label="Disponibilidad"
+                        value={
+                          selectedMaker.full_time == null
+                            ? null
+                            : selectedMaker.full_time
+                            ? "Tiempo completo"
+                            : "Tiempo parcial"
+                        }
+                      />
+                    </div>
+                  </DetailSection>
+
+                  {/* Roles de interés */}
+                  <DetailSection icon={Briefcase} title="Roles de interés">
+                    <FullPillList items={selectedMaker.roles || []} map={ROLES_MAP} />
+                  </DetailSection>
+
+                  {/* Industrias */}
+                  <DetailSection icon={Building2} title="Industrias">
+                    <FullPillList items={selectedMaker.industries || []} map={INDUSTRIES_MAP} />
+                  </DetailSection>
+
+                  {/* Skills */}
+                  <DetailSection icon={Wrench} title="Tools y Skills">
+                    <FullPillList items={selectedMaker.tools_skills || []} map={TOOLS_MAP} />
+                  </DetailSection>
+
+                  {/* Ubicación */}
+                  <DetailSection icon={MapPin} title="Ubicación">
+                    <div className="bg-[#1a2340]/60 rounded-xl p-4 border border-[#1e3a5f]/50">
+                      <InfoRow label="Ciudad" value={selectedMaker.location_city} />
+                    </div>
+                  </DetailSection>
+
+                  {/* Tipo de empresa */}
+                  <DetailSection icon={Building2} title="Tipo de empresa">
+                    <FullPillList items={selectedMaker.company_type || []} map={COMPANY_TYPE_MAP} />
+                  </DetailSection>
+
+                  {/* Salario */}
+                  <DetailSection icon={DollarSign} title="Pretensión salarial">
+                    <div className="bg-[#1a2340]/60 rounded-xl p-4 border border-[#1e3a5f]/50">
+                      <p className="text-white text-sm">
+                        {formatSalary(
+                          selectedMaker.salary_min,
+                          selectedMaker.salary_max,
+                          selectedMaker.salary_currency
+                        ) || (
+                          <span className="text-[#94a3b8]">Sin información</span>
+                        )}
+                      </p>
+                    </div>
+                  </DetailSection>
+
+                  {/* Fortalezas */}
+                  {selectedMaker.strengths && (
+                    <DetailSection icon={Sparkles} title="Fortalezas">
+                      <div className="bg-[#1a2340]/60 rounded-xl p-4 border border-[#1e3a5f]/50">
+                        <p className="text-white text-sm whitespace-pre-wrap leading-relaxed">
+                          {selectedMaker.strengths}
+                        </p>
+                      </div>
+                    </DetailSection>
+                  )}
+
+                  {/* Timestamps */}
+                  <div className="pt-4 border-t border-[#1e3a5f] space-y-1">
+                    {selectedMaker.updated_at && (
+                      <p className="text-[#94a3b8] text-xs">
+                        Actualizado:{" "}
+                        {new Date(selectedMaker.updated_at).toLocaleDateString(
+                          "es-ES",
+                          { day: "2-digit", month: "long", year: "numeric" }
+                        )}
+                      </p>
+                    )}
+                    {selectedMaker.created_at && (
+                      <p className="text-[#94a3b8] text-xs">
+                        Registrado:{" "}
+                        {new Date(selectedMaker.created_at).toLocaleDateString(
+                          "es-ES",
+                          { day: "2-digit", month: "long", year: "numeric" }
+                        )}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </ScrollArea>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+    </>
   )
 }
