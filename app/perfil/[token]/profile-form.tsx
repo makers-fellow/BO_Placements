@@ -19,6 +19,7 @@ import { AlertCircle, Upload, X, FileText, Loader2 } from "lucide-react"
 import { updateProfile, uploadCV, deleteCV, type ProfileData } from "./actions"
 import { ConfirmationView } from "./confirmation-view"
 import { cn } from "@/lib/utils"
+import { useToast } from "@/hooks/use-toast"
 
 interface ProfileFormProps {
   token: string
@@ -131,7 +132,7 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
   const [isUploading, setIsUploading] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [globalError, setGlobalError] = useState<string | null>(null)
+  const { toast } = useToast()
 
   // Form state
   const [searchStatus, setSearchStatus] = useState<"actively_seeking" | "open_to_offers" | "">(
@@ -209,7 +210,11 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
       setCvUrl(result.url)
       setCvFileName(file.name)
     } else {
-      setErrors((prev) => ({ ...prev, cv: result.error || "Error al subir el archivo" }))
+      toast({
+        variant: "destructive",
+        title: "Error al subir CV",
+        description: result.error || "Error al subir el archivo",
+      })
     }
   }
 
@@ -222,7 +227,11 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
       setCvUrl("")
       setCvFileName("")
     } else {
-      setErrors((prev) => ({ ...prev, cv: result.error || "Error al eliminar el archivo" }))
+      toast({
+        variant: "destructive",
+        title: "Error al eliminar CV",
+        description: result.error || "Error al eliminar el archivo",
+      })
     }
   }
 
@@ -230,8 +239,6 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
     e.preventDefault()
 
     if (!validateForm()) return
-
-    setGlobalError(null)
 
     startTransition(async () => {
       const data: ProfileData = {
@@ -259,7 +266,11 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
       if (result.success) {
         setSubmitted(true)
       } else {
-        setGlobalError(result.error || "Error al guardar. Intenta de nuevo.")
+        toast({
+          variant: "destructive",
+          title: "Error al guardar perfil",
+          description: result.error || "Error al guardar. Intenta de nuevo.",
+        })
       }
     })
   }
@@ -310,15 +321,6 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
           {" "}y conectamos contigo cuando llegue la vacante indicada.
         </p>
       </div>
-
-      {globalError && (
-        <Card className="border-[#FCA5A5] bg-[#FCA5A5]/10">
-          <CardContent className="flex items-center gap-3 py-4">
-            <AlertCircle className="size-5 text-[#FCA5A5]" />
-            <span className="text-[#FCA5A5]">{globalError}</span>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Section 1: Search Status */}
       <Card>
