@@ -53,33 +53,49 @@ export async function updateProfile(
     return { success: false, error: "Las fortalezas no pueden exceder 500 caracteres" }
   }
 
-  const { error } = await supabase
+  const updatePayload = {
+    search_status: data.search_status,
+    current_role: data.current_role,
+    seniority: data.seniority,
+    roles: data.roles,
+    industries: data.industries,
+    tools_skills: data.tools_skills,
+    location_city: data.location_city,
+    full_time: data.full_time,
+    company_type: data.company_type,
+    salary_min: data.salary_min,
+    salary_max: data.salary_max,
+    salary_currency: data.salary_currency,
+    linkedin_url: data.linkedin_url,
+    portfolio_url: data.portfolio_url,
+    github_url: data.github_url,
+    cv_url: data.cv_url,
+    strengths: data.strengths,
+    profile_last_updated_at: new Date().toISOString(),
+  }
+
+  console.log("[updateProfile] Token:", token)
+  console.log("[updateProfile] Payload:", JSON.stringify(updatePayload, null, 2))
+
+  const { data: updatedRows, error, count, status, statusText } = await supabase
     .from("placements_makers")
-    .update({
-      search_status: data.search_status,
-      current_role: data.current_role,
-      seniority: data.seniority,
-      roles: data.roles,
-      industries: data.industries,
-      tools_skills: data.tools_skills,
-      location_city: data.location_city,
-      full_time: data.full_time,
-      company_type: data.company_type,
-      salary_min: data.salary_min,
-      salary_max: data.salary_max,
-      salary_currency: data.salary_currency,
-      linkedin_url: data.linkedin_url,
-      portfolio_url: data.portfolio_url,
-      github_url: data.github_url,
-      cv_url: data.cv_url,
-      strengths: data.strengths,
-      profile_last_updated_at: new Date().toISOString(),
-    })
+    .update(updatePayload)
     .eq("magic_link_token", token)
+    .select()
+
+  console.log("[updateProfile] Status:", status, statusText)
+  console.log("[updateProfile] Error:", error)
+  console.log("[updateProfile] Updated rows:", updatedRows?.length ?? 0)
+  console.log("[updateProfile] Updated data:", JSON.stringify(updatedRows, null, 2))
 
   if (error) {
-    console.error("Error updating profile:", error)
+    console.error("[updateProfile] Supabase error:", error)
     return { success: false, error: "Error al actualizar el perfil. Intenta de nuevo." }
+  }
+
+  if (!updatedRows || updatedRows.length === 0) {
+    console.error("[updateProfile] No rows updated — possible RLS policy blocking the update or invalid token")
+    return { success: false, error: "No se pudo actualizar el perfil. Verifica que tu enlace sea válido." }
   }
 
   return { success: true }
