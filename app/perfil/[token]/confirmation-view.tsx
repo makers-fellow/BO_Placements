@@ -157,9 +157,9 @@ export function ConfirmationView({ name, data, onEdit }: ConfirmationViewProps) 
 
           {/* Professional Info */}
           <div className="grid gap-4 sm:grid-cols-2">
-            <InfoItem label="Rol actual" value={data.current_role} />
+            <InfoItem label="Rol actual" value={data.current_position} />
             <InfoItem label="Seniority" value={SENIORITY_MAP[data.seniority]} />
-            <InfoItem label="Ubicación" value={data.location_city} />
+            <InfoItem label="Ubicación" value={data.city} />
             <InfoItem
               label="Disponibilidad"
               value={data.full_time ? "Tiempo completo" : "Tiempo parcial"}
@@ -187,12 +187,12 @@ export function ConfirmationView({ name, data, onEdit }: ConfirmationViewProps) 
           )}
 
           {/* Tools & Skills */}
-          {data.tools_skills.length > 0 && (
+          {data.tools.length > 0 && (
             <div className="space-y-2">
               <span className="text-xs uppercase tracking-wider text-[#C7D2FE] font-medium">
                 Tools y Skills
               </span>
-              <PillList items={data.tools_skills} map={TOOLS_MAP} />
+              <PillList items={data.tools} map={TOOLS_MAP} />
             </div>
           )}
 

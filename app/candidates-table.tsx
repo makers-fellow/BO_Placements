@@ -324,13 +324,13 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
       const searchable = [
         m.full_name,
         m.email,
-        m.current_role,
-        m.location_city,
+        m.current_position,
+        m.city,
         m.seniority,
         m.search_status,
         ...(m.roles || []),
         ...(m.industries || []),
-        ...(m.tools_skills || []),
+        ...(m.tools || []),
         ...(m.company_type || []),
       ]
         .filter(Boolean)
@@ -647,7 +647,7 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
                   {/* Perfil profesional */}
                   <DetailSection icon={Briefcase} title="Perfil profesional">
                     <div className="space-y-2 bg-[#1a2340]/60 rounded-xl p-4 border border-[#1e3a5f]/50">
-                      <InfoRow label="Rol actual" value={selectedMaker.current_role} />
+                      <InfoRow label="Rol actual" value={selectedMaker.current_position} />
                       <InfoRow
                         label="Seniority"
                         value={
@@ -681,13 +681,13 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
 
                   {/* Skills */}
                   <DetailSection icon={Wrench} title="Tools y Skills">
-                    <FullPillList items={selectedMaker.tools_skills || []} map={TOOLS_MAP} />
+                    <FullPillList items={selectedMaker.tools || []} map={TOOLS_MAP} />
                   </DetailSection>
 
                   {/* Ubicación */}
                   <DetailSection icon={MapPin} title="Ubicación">
                     <div className="bg-[#1a2340]/60 rounded-xl p-4 border border-[#1e3a5f]/50">
-                      <InfoRow label="Ciudad" value={selectedMaker.location_city} />
+                      <InfoRow label="Ciudad" value={selectedMaker.city} />
                     </div>
                   </DetailSection>
 

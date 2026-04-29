@@ -4,12 +4,12 @@ import { createClient } from "@/lib/supabase/server"
 
 export interface ProfileData {
   search_status: "actively_seeking" | "open_to_offers"
-  current_role: string
+  current_position: string
   seniority: "junior" | "mid" | "senior" | "lead" | "principal"
   roles: string[]
   industries: string[]
-  tools_skills: string[]
-  location_city: string
+  tools: string[]
+  city: string
   full_time: boolean
   company_type: string[]
   salary_min: number | null
@@ -55,12 +55,12 @@ export async function updateProfile(
 
   const updatePayload = {
     search_status: data.search_status,
-    current_role: data.current_role,
+    current_position: data.current_position,
     seniority: data.seniority,
     roles: data.roles,
     industries: data.industries,
-    tools_skills: data.tools_skills,
-    location_city: data.location_city,
+    tools: data.tools,
+    city: data.city,
     full_time: data.full_time,
     company_type: data.company_type,
     salary_min: data.salary_min,

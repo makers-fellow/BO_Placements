@@ -138,12 +138,12 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
   const [searchStatus, setSearchStatus] = useState<"actively_seeking" | "open_to_offers" | "">(
     initialData.search_status || ""
   )
-  const [currentRole, setCurrentRole] = useState(initialData.current_role || "")
+  const [currentRole, setCurrentRole] = useState(initialData.current_position || "")
   const [seniority, setSeniority] = useState(initialData.seniority || "")
   const [roles, setRoles] = useState<string[]>(initialData.roles || [])
   const [industries, setIndustries] = useState<string[]>(initialData.industries || [])
-  const [toolsSkills, setToolsSkills] = useState<string[]>(initialData.tools_skills || [])
-  const [locationCity, setLocationCity] = useState(initialData.location_city || "")
+  const [toolsSkills, setToolsSkills] = useState<string[]>(initialData.tools || [])
+  const [locationCity, setLocationCity] = useState(initialData.city || "")
   const [fullTime, setFullTime] = useState(initialData.full_time ?? true)
   const [companyType, setCompanyType] = useState<string[]>(initialData.company_type || [])
   const [salaryMin, setSalaryMin] = useState(initialData.salary_min?.toString() || "")
@@ -243,12 +243,12 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
     startTransition(async () => {
       const data: ProfileData = {
         search_status: searchStatus as "actively_seeking" | "open_to_offers",
-        current_role: currentRole,
+        current_position: currentRole,
         seniority: seniority as ProfileData["seniority"],
         roles,
         industries,
-        tools_skills: toolsSkills,
-        location_city: locationCity,
+        tools: toolsSkills,
+        city: locationCity,
         full_time: fullTime,
         company_type: companyType,
         salary_min: salaryMin ? Number(salaryMin) : null,
@@ -281,12 +281,12 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
         name={initialData.name || "Maker"}
         data={{
           search_status: searchStatus as "actively_seeking" | "open_to_offers",
-          current_role: currentRole,
+          current_position: currentRole,
           seniority: seniority as ProfileData["seniority"],
           roles,
           industries,
-          tools_skills: toolsSkills,
-          location_city: locationCity,
+          tools: toolsSkills,
+          city: locationCity,
           full_time: fullTime,
           company_type: companyType,
           salary_min: salaryMin ? Number(salaryMin) : null,
