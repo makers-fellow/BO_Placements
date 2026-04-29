@@ -89,8 +89,8 @@ export async function updateProfile(
   console.log("[updateProfile] Updated data:", JSON.stringify(updatedRows, null, 2))
 
   if (error) {
-    console.error("[updateProfile] Supabase error:", error)
-    return { success: false, error: "Error al actualizar el perfil. Intenta de nuevo." }
+    console.error("[updateProfile] Supabase error:", JSON.stringify(error, null, 2))
+    return { success: false, error: `Error Supabase: ${error.message} (code: ${error.code})` }
   }
 
   if (!updatedRows || updatedRows.length === 0) {
