@@ -26,3 +26,25 @@ CREATE POLICY "Allow update via magic_link_token"
 --   ON placements_makers
 --   FOR INSERT
 --   WITH CHECK (true);
+
+-- ==========================================================
+-- Storage Policies for "CVs Makers" bucket
+-- ==========================================================
+
+-- Allow anyone to upload files (INSERT)
+CREATE POLICY "Allow public upload to CVs Makers"
+  ON storage.objects
+  FOR INSERT
+  WITH CHECK (bucket_id = 'CVs Makers');
+
+-- Allow anyone to read/download files (SELECT)
+CREATE POLICY "Allow public read from CVs Makers"
+  ON storage.objects
+  FOR SELECT
+  USING (bucket_id = 'CVs Makers');
+
+-- Allow anyone to delete files (DELETE)
+CREATE POLICY "Allow public delete from CVs Makers"
+  ON storage.objects
+  FOR DELETE
+  USING (bucket_id = 'CVs Makers');

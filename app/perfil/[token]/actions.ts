@@ -125,7 +125,7 @@ export async function uploadCV(
   const fileName = `${token}-${Date.now()}.pdf`
 
   const { error: uploadError } = await supabase.storage
-    .from("cvs")
+    .from("CVs Makers")
     .upload(fileName, file, {
       contentType: "application/pdf",
       upsert: true,
@@ -136,7 +136,7 @@ export async function uploadCV(
     return { success: false, error: "Error al subir el archivo. Intenta de nuevo." }
   }
 
-  const { data: urlData } = supabase.storage.from("cvs").getPublicUrl(fileName)
+  const { data: urlData } = supabase.storage.from("CVs Makers").getPublicUrl(fileName)
 
   return { success: true, url: urlData.publicUrl }
 }
@@ -154,7 +154,7 @@ export async function deleteCV(
     return { success: false, error: "URL de archivo inválida" }
   }
 
-  const { error } = await supabase.storage.from("cvs").remove([fileName])
+  const { error } = await supabase.storage.from("CVs Makers").remove([fileName])
 
   if (error) {
     console.error("Error deleting CV:", error)
