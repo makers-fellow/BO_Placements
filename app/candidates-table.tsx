@@ -322,8 +322,7 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
 
     return makers.filter((m) => {
       const searchable = [
-        m.first_name,
-        m.last_name,
+        m.full_name,
         m.email,
         m.current_role,
         m.location_city,
@@ -346,12 +345,8 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
     if (!sortKey || !sortDir) return filtered
 
     return [...filtered].sort((a, b) => {
-      let aVal = sortKey === "full_name"
-        ? [a.first_name, a.last_name].filter(Boolean).join(" ")
-        : a[sortKey]
-      let bVal = sortKey === "full_name"
-        ? [b.first_name, b.last_name].filter(Boolean).join(" ")
-        : b[sortKey]
+      let aVal = a[sortKey]
+      let bVal = b[sortKey]
 
       if (aVal == null && bVal == null) return 0
       if (aVal == null) return 1
@@ -464,9 +459,7 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
                       {/* Name */}
                       <TableCell>
                         <span className="font-semibold text-white group-hover:text-[#86EFAC] transition-colors whitespace-nowrap">
-                          {[maker.first_name, maker.last_name]
-                            .filter(Boolean)
-                            .join(" ") || "—"}
+                          {maker.full_name || "—"}
                         </span>
                       </TableCell>
 
@@ -583,9 +576,7 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
             <>
               <SheetHeader className="p-6 pb-4 border-b border-[#1e3a5f]">
                 <SheetTitle className="text-2xl font-extrabold text-white">
-                  {[selectedMaker.first_name, selectedMaker.last_name]
-                    .filter(Boolean)
-                    .join(" ") || "Maker"}
+                  {selectedMaker.full_name || "Maker"}
                 </SheetTitle>
                 <SheetDescription className="text-[#C7D2FE]">
                   {selectedMaker.email || "Sin email"}
