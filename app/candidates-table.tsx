@@ -287,7 +287,7 @@ interface CandidatesTableProps {
 
 export function CandidatesTable({ makers }: CandidatesTableProps) {
   const [search, setSearch] = useState("")
-  const [sortKey, setSortKey] = useState<SortKey>("first_name")
+  const [sortKey, setSortKey] = useState<SortKey>("full_name")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
   const [page, setPage] = useState(0)
   const [selectedMaker, setSelectedMaker] = useState<any | null>(null)
@@ -346,8 +346,12 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
     if (!sortKey || !sortDir) return filtered
 
     return [...filtered].sort((a, b) => {
-      let aVal = a[sortKey]
-      let bVal = b[sortKey]
+      let aVal = sortKey === "full_name"
+        ? [a.first_name, a.last_name].filter(Boolean).join(" ")
+        : a[sortKey]
+      let bVal = sortKey === "full_name"
+        ? [b.first_name, b.last_name].filter(Boolean).join(" ")
+        : b[sortKey]
 
       if (aVal == null && bVal == null) return 0
       if (aVal == null) return 1
@@ -384,7 +388,7 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
   }
 
   const columns: { key: string; label: string; sortable?: boolean }[] = [
-    { key: "first_name", label: "Nombre", sortable: true },
+    { key: "full_name", label: "Full Name", sortable: true },
     { key: "email", label: "Email", sortable: true },
     { key: "search_status", label: "Estado", sortable: true },
     { key: "seniority", label: "Seniority", sortable: true },
