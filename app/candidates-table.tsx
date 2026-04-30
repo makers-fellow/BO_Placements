@@ -237,20 +237,27 @@ function CopyProfileButton({ token }: { token: string }) {
   )
 }
 
-function WhatsAppButton({ token, name }: { token: string; name: string }) {
+function WhatsAppButton({ token, name, phone }: { token: string; name: string; phone?: string | null }) {
   const handleWhatsApp = (e: React.MouseEvent) => {
     e.stopPropagation()
     const url = `${window.location.origin}/perfil/${token}`
     // Texto por defecto. Puedes editarlo si "kapso" significa otra cosa.
     const text = encodeURIComponent(`Hola ${name || 'Maker'}, por favor completa tu perfil en Makers ingresando a este enlace: ${url}`)
-    window.open(`https://wa.me/?text=${text}`, "_blank")
+    
+    if (phone) {
+      // Remover el '+' u otros caracteres no numéricos para la URL de WhatsApp
+      const cleanPhone = phone.replace(/\D/g, '')
+      window.open(`https://wa.me/${cleanPhone}?text=${text}`, "_blank")
+    } else {
+      window.open(`https://wa.me/?text=${text}`, "_blank")
+    }
   }
 
   return (
     <button
       onClick={handleWhatsApp}
       className="inline-flex items-center justify-center size-8 rounded-lg transition-all bg-[#25D366]/15 text-[#25D366] hover:bg-[#25D366]/25 border border-[#25D366]/20"
-      title="Enviar WhatsApp"
+      title={phone ? "Enviar WhatsApp directo" : "Enviar WhatsApp"}
     >
       <MessageCircle className="size-3.5" />
     </button>
@@ -533,7 +540,7 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
                             label="CV"
                           />
                           <CopyProfileButton token={maker.magic_link_token} />
-                          <WhatsAppButton token={maker.magic_link_token} name={maker.full_name} />
+                          <WhatsAppButton token={maker.magic_link_token} name={maker.full_name} phone={maker.phone_e164} />
                         </div>
                       </TableCell>
                     </TableRow>
@@ -662,7 +669,7 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
                     </a>
                   )}
                   <CopyProfileButton token={selectedMaker.magic_link_token} />
-                  <WhatsAppButton token={selectedMaker.magic_link_token} name={selectedMaker.full_name} />
+                  <WhatsAppButton token={selectedMaker.magic_link_token} name={selectedMaker.full_name} phone={selectedMaker.phone_e164} />
                 </div>
               </SheetHeader>
 
