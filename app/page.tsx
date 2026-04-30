@@ -20,18 +20,15 @@ export default async function HomePage() {
     // Check auth
     const { data: { user } } = await supabase.auth.getUser()
     
-    let debugInfo: any = {}
     if (user) {
       userEmail = user.email || ""
       // Get dashboard user status
-      const { data: dbUser, error: dbError } = await supabase
+      const { data: dbUser } = await supabase
         .from('dashboard_users')
         .select('status, role')
         .eq('auth_id', user.id)
         .single()
         
-      debugInfo = { userId: user.id, dbUser, dbError }
-      
       userStatus = dbUser?.status as any || 'pending'
       isAdmin = dbUser?.role === 'admin'
     }
@@ -57,11 +54,6 @@ export default async function HomePage() {
       {userEmail && <Navbar userEmail={userEmail} isAdmin={isAdmin} />}
       <main className="py-8 px-4 md:px-8">
         <div className="max-w-[1600px] mx-auto">
-          {/* Debug Banner (Temporal) */}
-          <div className="bg-yellow-500/20 border border-yellow-500 p-4 mb-4 rounded text-yellow-200 text-xs font-mono break-all">
-            <p><strong>DEBUG INFO:</strong></p>
-            <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
-          </div>
           {/* Header */}
           <div className="flex items-center gap-4 pb-8">
             <img
