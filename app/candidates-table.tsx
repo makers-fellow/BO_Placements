@@ -38,6 +38,7 @@ import {
   Wrench,
   Building2,
   Sparkles,
+  MessageCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -232,6 +233,26 @@ function CopyProfileButton({ token }: { token: string }) {
       title="Copiar link de perfil"
     >
       {copied ? <Check className="size-3.5" /> : <Link2 className="size-3.5" />}
+    </button>
+  )
+}
+
+function WhatsAppButton({ token, name }: { token: string; name: string }) {
+  const handleWhatsApp = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const url = `${window.location.origin}/perfil/${token}`
+    // Texto por defecto. Puedes editarlo si "kapso" significa otra cosa.
+    const text = encodeURIComponent(`Hola ${name || 'Maker'}, por favor completa tu perfil en Makers ingresando a este enlace: ${url}`)
+    window.open(`https://wa.me/?text=${text}`, "_blank")
+  }
+
+  return (
+    <button
+      onClick={handleWhatsApp}
+      className="inline-flex items-center justify-center size-8 rounded-lg transition-all bg-[#25D366]/15 text-[#25D366] hover:bg-[#25D366]/25 border border-[#25D366]/20"
+      title="Enviar WhatsApp"
+    >
+      <MessageCircle className="size-3.5" />
     </button>
   )
 }
@@ -512,6 +533,7 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
                             label="CV"
                           />
                           <CopyProfileButton token={maker.magic_link_token} />
+                          <WhatsAppButton token={maker.magic_link_token} name={maker.full_name} />
                         </div>
                       </TableCell>
                     </TableRow>
@@ -639,6 +661,8 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
                       <ExternalLink className="size-3" />
                     </a>
                   )}
+                  <CopyProfileButton token={selectedMaker.magic_link_token} />
+                  <WhatsAppButton token={selectedMaker.magic_link_token} name={selectedMaker.full_name} />
                 </div>
               </SheetHeader>
 
