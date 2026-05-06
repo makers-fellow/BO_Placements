@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useRef, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import {
@@ -39,6 +39,13 @@ import {
   Building2,
   Sparkles,
   MessageCircle,
+  Calendar,
+  SlidersHorizontal,
+  ChevronDown,
+  GraduationCap,
+  Code2,
+  Landmark,
+  X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -96,6 +103,11 @@ const TOOLS_MAP: Record<string, string> = {
   ux_writing: "UX Writing", sql: "SQL", python: "Python", excel_sheets: "Excel/Sheets",
   tableau: "Tableau", power_bi: "Power BI", react: "React", nodejs: "Node.js",
   typescript: "TypeScript", aws: "AWS", docker: "Docker",
+}
+
+const COHORT_TYPE_MAP: Record<string, string> = {
+  business: "Business",
+  coding: "Coding",
 }
 
 /* ── Helpers ─────────────────────────────────────────────── */
@@ -237,12 +249,12 @@ function CopyProfileButton({ token }: { token: string }) {
   )
 }
 
-function WhatsAppButton({ token, name, phone }: { token: string; name: string; phone?: string | null }) {
+function WhatsAppButton({ token, firstName, phone }: { token: string; firstName?: string | null; phone?: string | null }) {
   const handleWhatsApp = (e: React.MouseEvent) => {
     e.stopPropagation()
     const url = `${window.location.origin}/perfil/${token}`
-    // Texto por defecto. Puedes editarlo si "kapso" significa otra cosa.
-    const text = encodeURIComponent(`Hola ${name || 'Maker'}, por favor completa tu perfil en Makers ingresando a este enlace: ${url}`)
+    const displayName = firstName || 'Maker'
+    const text = encodeURIComponent(`Hola ${displayName}, por favor completa tu perfil en Makers ingresando a este enlace: ${url}`)
     
     if (phone) {
       // Remover el '+' u otros caracteres no numéricos para la URL de WhatsApp
@@ -307,6 +319,37 @@ type SortKey = string
 
 const ROWS_PER_PAGE = 20
 
+/* ── Date helpers ────────────────────────────────────────── */
+
+function formatRelativeDate(dateStr: string | null): string {
+  if (!dateStr) return "—"
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+  if (diffDays === 0) return "Hoy"
+  if (diffDays === 1) return "Ayer"
+  if (diffDays < 7) return `Hace ${diffDays} días`
+  if (diffDays < 30) {
+    const weeks = Math.floor(diffDays / 7)
+    return `Hace ${weeks} sem${weeks > 1 ? "" : "."}`
+  }
+  if (diffDays < 365) {
+    const months = Math.floor(diffDays / 30)
+    return `Hace ${months} mes${months > 1 ? "es" : ""}`
+  }
+  return date.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" })
+}
+
+function getDateColor(dateStr: string | null): string {
+  if (!dateStr) return "text-[#94a3b8]/50"
+  const diffDays = Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24))
+  if (diffDays <= 7) return "text-[#86EFAC]"
+  if (diffDays <= 30) return "text-[#C7D2FE]"
+  return "text-[#94a3b8]"
+}
+
 /* ── Main component ──────────────────────────────────────── */
 
 interface CandidatesTableProps {
@@ -320,6 +363,38 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
   const [page, setPage] = useState(0)
   const [selectedMaker, setSelectedMaker] = useState<any | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [dateFilter, setDateFilter] = useState<"all" | "today" | "week" | "month" | "older">("all")
+  const [cohortTypeFilter, setCohortTypeFilter] = useState<"all" | "business" | "coding">("all")
+  const [selectedCohorts, setSelectedCohorts] = useState<string[]>([])
+  const [cohortDropdownOpen, setCohortDropdownOpen] = useState(false)
+  const cohortDropdownRef = useRef<HTMLDivElement>(null)
+
+  // Extract unique cohort names from the data
+  const availableCohorts = useMemo(() => {
+    const cohorts = new Set<string>()
+    makers.forEach((m) => {
+      if (m.cohort) cohorts.add(m.cohort)
+    })
+    return Array.from(cohorts).sort()
+  }, [makers])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (cohortDropdownRef.current && !cohortDropdownRef.current.contains(e.target as Node)) {
+        setCohortDropdownOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  const toggleCohort = (cohort: string) => {
+    setSelectedCohorts((prev) =>
+      prev.includes(cohort) ? prev.filter((c) => c !== cohort) : [...prev, cohort]
+    )
+    setPage(0)
+  }
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -345,10 +420,39 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
   }
 
   const filtered = useMemo(() => {
-    const q = search.toLowerCase().trim()
-    if (!q) return makers
+    let result = makers
 
-    return makers.filter((m) => {
+    // Cohort type filter (maker_type field)
+    if (cohortTypeFilter !== "all") {
+      result = result.filter((m) => m.maker_type === cohortTypeFilter)
+    }
+
+    // Cohort name filter (multi-select on cohort field)
+    if (selectedCohorts.length > 0) {
+      result = result.filter((m) => m.cohort && selectedCohorts.includes(m.cohort))
+    }
+
+    // Date filter
+    if (dateFilter !== "all") {
+      const now = Date.now()
+      result = result.filter((m) => {
+        if (!m.updated_at) return dateFilter === "older"
+        const diffDays = Math.floor((now - new Date(m.updated_at).getTime()) / (1000 * 60 * 60 * 24))
+        switch (dateFilter) {
+          case "today": return diffDays === 0
+          case "week": return diffDays <= 7
+          case "month": return diffDays <= 30
+          case "older": return diffDays > 30
+          default: return true
+        }
+      })
+    }
+
+    // Text search
+    const q = search.toLowerCase().trim()
+    if (!q) return result
+
+    return result.filter((m) => {
       const searchable = [
         m.full_name,
         m.email,
@@ -356,6 +460,8 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
         m.city,
         m.seniority,
         m.search_status,
+        m.maker_type,
+        m.cohort,
         ...(m.roles || []),
         ...(m.industries || []),
         ...(m.tools || []),
@@ -367,7 +473,7 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
 
       return searchable.includes(q)
     })
-  }, [makers, search])
+  }, [makers, search, dateFilter, cohortTypeFilter, selectedCohorts])
 
   const sorted = useMemo(() => {
     if (!sortKey || !sortDir) return filtered
@@ -411,25 +517,37 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
   }
 
   const columns: { key: string; label: string; sortable?: boolean }[] = [
-    { key: "full_name", label: "Full Name", sortable: true },
+    { key: "full_name", label: "Nombre", sortable: true },
     { key: "email", label: "Email", sortable: true },
     { key: "search_status", label: "Estado", sortable: true },
     { key: "seniority", label: "Seniority", sortable: true },
     { key: "roles", label: "Roles de interés" },
+    { key: "maker_type", label: "Track", sortable: true },
+    { key: "cohort", label: "Cohort", sortable: true },
+    { key: "updated_at", label: "Actualizado", sortable: true },
     { key: "actions", label: "Acciones" },
+  ]
+
+  const DATE_FILTER_OPTIONS = [
+    { value: "all" as const, label: "Todos" },
+    { value: "today" as const, label: "Hoy" },
+    { value: "week" as const, label: "Última semana" },
+    { value: "month" as const, label: "Último mes" },
+    { value: "older" as const, label: "Más de 1 mes" },
   ]
 
   return (
     <>
       <div className="space-y-4">
-        {/* Search bar */}
+        {/* Search bar + Filters */}
         <Card className="border-[#1e3a5f] bg-[#1a2340]/60 backdrop-blur-sm">
-          <CardContent className="py-4">
+          <CardContent className="py-4 space-y-3">
+            {/* Row 1: Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#94a3b8]" />
               <Input
                 id="search-candidates"
-                placeholder="Buscar por nombre, rol, skill, ciudad..."
+                placeholder="Buscar por nombre, rol, skill, ciudad, cohort..."
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value)
@@ -437,6 +555,156 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
                 }}
                 className="pl-10 bg-[#0F1729] border-[#1e3a5f] text-white placeholder:text-[#94a3b8] h-11 focus:border-[#86EFAC] focus:ring-[#86EFAC]/20"
               />
+            </div>
+
+            {/* Row 2: Filter pills */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              {/* Cohort Type filter */}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 text-[#94a3b8] shrink-0">
+                  <GraduationCap className="size-4" />
+                  <span className="text-xs hidden sm:inline">Track:</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  {(["all", "business", "coding"] as const).map((type) => {
+                    const labels = { all: "Todos", business: "Business", coding: "Coding" }
+                    const icons = { all: null, business: Landmark, coding: Code2 }
+                    const Icon = icons[type]
+                    return (
+                      <button
+                        key={type}
+                        onClick={() => {
+                          setCohortTypeFilter(type)
+                          setPage(0)
+                        }}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
+                          cohortTypeFilter === type
+                            ? type === "business"
+                              ? "bg-[#FBBF24]/15 text-[#FBBF24] border border-[#FBBF24]/30"
+                              : type === "coding"
+                              ? "bg-[#818CF8]/15 text-[#818CF8] border border-[#818CF8]/30"
+                              : "bg-[#86EFAC]/15 text-[#86EFAC] border border-[#86EFAC]/30"
+                            : "bg-[#0F1729] text-[#94a3b8] border border-[#1e3a5f] hover:border-[#86EFAC]/30 hover:text-[#C7D2FE]"
+                        }`}
+                      >
+                        {Icon && <Icon className="size-3" />}
+                        {labels[type]}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Cohort Name multi-select dropdown */}
+              {availableCohorts.length > 0 && (
+                <div className="flex items-center gap-2" ref={cohortDropdownRef}>
+                  <div className="flex items-center gap-1.5 text-[#94a3b8] shrink-0">
+                    <span className="text-xs hidden sm:inline">Cohort:</span>
+                  </div>
+                  <div className="relative">
+                    <button
+                      onClick={() => setCohortDropdownOpen(!cohortDropdownOpen)}
+                      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                        selectedCohorts.length > 0
+                          ? "bg-[#86EFAC]/15 text-[#86EFAC] border-[#86EFAC]/30"
+                          : "bg-[#0F1729] text-[#94a3b8] border-[#1e3a5f] hover:border-[#86EFAC]/30 hover:text-[#C7D2FE]"
+                      }`}
+                    >
+                      {selectedCohorts.length === 0
+                        ? "Todos los cohorts"
+                        : `${selectedCohorts.length} cohort${selectedCohorts.length > 1 ? "s" : ""}`}
+                      <ChevronDown className={`size-3 transition-transform ${cohortDropdownOpen ? "rotate-180" : ""}`} />
+                    </button>
+
+                    {/* Dropdown panel */}
+                    {cohortDropdownOpen && (
+                      <div className="absolute top-full left-0 mt-1 z-50 min-w-[200px] rounded-xl border border-[#1e3a5f] bg-[#0F1729] shadow-xl shadow-black/40 overflow-hidden">
+                        {/* Clear all */}
+                        {selectedCohorts.length > 0 && (
+                          <button
+                            onClick={() => {
+                              setSelectedCohorts([])
+                              setPage(0)
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[#FCA5A5] hover:bg-[#FCA5A5]/10 transition-colors border-b border-[#1e3a5f]"
+                          >
+                            <X className="size-3" />
+                            Limpiar selección
+                          </button>
+                        )}
+                        <div className="max-h-[240px] overflow-y-auto py-1">
+                          {availableCohorts.map((cohort) => {
+                            const isSelected = selectedCohorts.includes(cohort)
+                            return (
+                              <button
+                                key={cohort}
+                                onClick={() => toggleCohort(cohort)}
+                                className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs transition-colors ${
+                                  isSelected
+                                    ? "bg-[#86EFAC]/10 text-[#86EFAC]"
+                                    : "text-[#C7D2FE] hover:bg-[#1e3a5f]/50"
+                                }`}
+                              >
+                                <span className={`flex items-center justify-center size-4 rounded border transition-all ${
+                                  isSelected
+                                    ? "bg-[#86EFAC] border-[#86EFAC]"
+                                    : "border-[#1e3a5f]"
+                                }`}>
+                                  {isSelected && <Check className="size-2.5 text-[#0F1729]" />}
+                                </span>
+                                {cohort}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Selected cohort badges */}
+                  {selectedCohorts.length > 0 && (
+                    <div className="hidden sm:flex items-center gap-1 flex-wrap">
+                      {selectedCohorts.map((c) => (
+                        <span
+                          key={c}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-[#86EFAC]/10 text-[#86EFAC] border border-[#86EFAC]/20"
+                        >
+                          {c}
+                          <button onClick={() => toggleCohort(c)} className="hover:text-white">
+                            <X className="size-2.5" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Date filter */}
+              <div className="flex items-center gap-2 sm:ml-auto">
+                <div className="flex items-center gap-1.5 text-[#94a3b8] shrink-0">
+                  <SlidersHorizontal className="size-4" />
+                  <span className="text-xs hidden sm:inline">Actualización:</span>
+                </div>
+                <div className="flex items-center gap-1 flex-wrap">
+                  {DATE_FILTER_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => {
+                        setDateFilter(opt.value)
+                        setPage(0)
+                      }}
+                      className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
+                        dateFilter === opt.value
+                          ? "bg-[#86EFAC]/15 text-[#86EFAC] border border-[#86EFAC]/30"
+                          : "bg-[#0F1729] text-[#94a3b8] border border-[#1e3a5f] hover:border-[#86EFAC]/30 hover:text-[#C7D2FE]"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -523,6 +791,43 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
                         <PillList items={maker.roles || []} map={ROLES_MAP} />
                       </TableCell>
 
+                      {/* Track (maker_type) */}
+                      <TableCell>
+                        {maker.maker_type ? (
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                            maker.maker_type === "business"
+                              ? "bg-[#FBBF24]/15 text-[#FBBF24] border border-[#FBBF24]/30"
+                              : "bg-[#818CF8]/15 text-[#818CF8] border border-[#818CF8]/30"
+                          }`}>
+                            {maker.maker_type === "business" ? <Landmark className="size-3" /> : <Code2 className="size-3" />}
+                            {COHORT_TYPE_MAP[maker.maker_type] || maker.maker_type}
+                          </span>
+                        ) : (
+                          <span className="text-[#94a3b8]">—</span>
+                        )}
+                      </TableCell>
+
+                      {/* Cohort */}
+                      <TableCell>
+                        {maker.cohort ? (
+                          <span className="px-2.5 py-1 rounded-full text-xs bg-[#1e3a5f]/60 text-[#C7D2FE] border border-[#1e3a5f] whitespace-nowrap">
+                            {maker.cohort}
+                          </span>
+                        ) : (
+                          <span className="text-[#94a3b8]">—</span>
+                        )}
+                      </TableCell>
+
+                      {/* Última actualización */}
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className={`size-3 ${getDateColor(maker.updated_at)}`} />
+                          <span className={`text-xs whitespace-nowrap ${getDateColor(maker.updated_at)}`}>
+                            {formatRelativeDate(maker.updated_at)}
+                          </span>
+                        </div>
+                      </TableCell>
+
                       {/* Action Buttons */}
                       <TableCell>
                         <div
@@ -540,7 +845,7 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
                             label="CV"
                           />
                           <CopyProfileButton token={maker.magic_link_token} />
-                          <WhatsAppButton token={maker.magic_link_token} name={maker.full_name} phone={maker.phone_e164} />
+                          <WhatsAppButton token={maker.magic_link_token} firstName={maker.first_name} phone={maker.phone_e164} />
                         </div>
                       </TableCell>
                     </TableRow>
@@ -669,12 +974,34 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
                     </a>
                   )}
                   <CopyProfileButton token={selectedMaker.magic_link_token} />
-                  <WhatsAppButton token={selectedMaker.magic_link_token} name={selectedMaker.full_name} phone={selectedMaker.phone_e164} />
+                  <WhatsAppButton token={selectedMaker.magic_link_token} firstName={selectedMaker.first_name} phone={selectedMaker.phone_e164} />
                 </div>
               </SheetHeader>
 
               <ScrollArea className="flex-1 overflow-y-auto">
                 <div className="p-6 space-y-6">
+                  {/* Cohort info */}
+                  {(selectedMaker.maker_type || selectedMaker.cohort) && (
+                    <DetailSection icon={GraduationCap} title="Cohort">
+                      <div className="space-y-2 bg-[#1a2340]/60 rounded-xl p-4 border border-[#1e3a5f]/50">
+                        {selectedMaker.maker_type && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-[#94a3b8] text-sm">Track</span>
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+                              selectedMaker.maker_type === "business"
+                                ? "bg-[#FBBF24]/15 text-[#FBBF24] border border-[#FBBF24]/30"
+                                : "bg-[#818CF8]/15 text-[#818CF8] border border-[#818CF8]/30"
+                            }`}>
+                              {selectedMaker.maker_type === "business" ? <Landmark className="size-3" /> : <Code2 className="size-3" />}
+                              {COHORT_TYPE_MAP[selectedMaker.maker_type] || selectedMaker.maker_type}
+                            </span>
+                          </div>
+                        )}
+                        <InfoRow label="Cohort" value={selectedMaker.cohort} />
+                      </div>
+                    </DetailSection>
+                  )}
+
                   {/* Perfil profesional */}
                   <DetailSection icon={Briefcase} title="Perfil profesional">
                     <div className="space-y-2 bg-[#1a2340]/60 rounded-xl p-4 border border-[#1e3a5f]/50">
@@ -754,26 +1081,37 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
                   )}
 
                   {/* Timestamps */}
-                  <div className="pt-4 border-t border-[#1e3a5f] space-y-1">
-                    {selectedMaker.updated_at && (
-                      <p className="text-[#94a3b8] text-xs">
-                        Actualizado:{" "}
-                        {new Date(selectedMaker.updated_at).toLocaleDateString(
-                          "es-ES",
-                          { day: "2-digit", month: "long", year: "numeric" }
-                        )}
-                      </p>
-                    )}
-                    {selectedMaker.created_at && (
-                      <p className="text-[#94a3b8] text-xs">
-                        Registrado:{" "}
-                        {new Date(selectedMaker.created_at).toLocaleDateString(
-                          "es-ES",
-                          { day: "2-digit", month: "long", year: "numeric" }
-                        )}
-                      </p>
-                    )}
-                  </div>
+                  <DetailSection icon={Calendar} title="Fechas">
+                    <div className="space-y-2 bg-[#1a2340]/60 rounded-xl p-4 border border-[#1e3a5f]/50">
+                      {selectedMaker.updated_at && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-[#94a3b8] text-sm">Última actualización</span>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm font-medium ${getDateColor(selectedMaker.updated_at)}`}>
+                              {formatRelativeDate(selectedMaker.updated_at)}
+                            </span>
+                            <span className="text-[#94a3b8] text-xs">
+                              ({new Date(selectedMaker.updated_at).toLocaleDateString(
+                                "es-ES",
+                                { day: "2-digit", month: "short", year: "numeric" }
+                              )})
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      {selectedMaker.created_at && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-[#94a3b8] text-sm">Registrado</span>
+                          <span className="text-white text-sm">
+                            {new Date(selectedMaker.created_at).toLocaleDateString(
+                              "es-ES",
+                              { day: "2-digit", month: "long", year: "numeric" }
+                            )}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </DetailSection>
                 </div>
               </ScrollArea>
             </>
