@@ -94,6 +94,7 @@ const SENIORITY_MAP: Record<string, string> = {
 const STATUS_MAP: Record<string, string> = {
   actively_seeking: "Buscando",
   open_to_offers: "Abierto",
+  not_looking: "No busca",
 }
 
 const TOOLS_MAP: Record<string, string> = {
@@ -114,17 +115,20 @@ const COHORT_TYPE_MAP: Record<string, string> = {
 
 function StatusBadge({ status }: { status: string }) {
   const isActive = status === "actively_seeking"
+  const isNotLooking = status === "not_looking"
   return (
     <span
       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
         isActive
           ? "bg-[#86EFAC]/15 text-[#86EFAC] border border-[#86EFAC]/30"
+          : isNotLooking
+          ? "bg-[#94a3b8]/10 text-[#94a3b8] border border-[#94a3b8]/20"
           : "bg-[#C7D2FE]/10 text-[#C7D2FE] border border-[#C7D2FE]/20"
       }`}
     >
       <span
         className={`w-1.5 h-1.5 rounded-full ${
-          isActive ? "bg-[#86EFAC] animate-pulse" : "bg-[#C7D2FE]"
+          isActive ? "bg-[#86EFAC] animate-pulse" : isNotLooking ? "bg-[#94a3b8]" : "bg-[#C7D2FE]"
         }`}
       />
       {STATUS_MAP[status] || status}
@@ -540,7 +544,7 @@ export function CandidatesTable({ makers }: CandidatesTableProps) {
     <>
       <div className="space-y-4">
         {/* Search bar + Filters */}
-        <Card className="border-[#1e3a5f] bg-[#1a2340]/60 backdrop-blur-sm">
+        <Card className="border-[#1e3a5f] bg-[#1a2340]/60 backdrop-blur-sm relative z-10 overflow-visible">
           <CardContent className="py-4 space-y-3">
             {/* Row 1: Search */}
             <div className="relative">

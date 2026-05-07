@@ -3,7 +3,9 @@
 import { createClient } from "@/lib/supabase/server"
 
 export interface ProfileData {
-  search_status: "actively_seeking" | "open_to_offers"
+  search_status: "actively_seeking" | "open_to_offers" | "not_looking"
+  user_type: "seeker" | "founder" | "employed"
+  // Seeker fields
   current_position: string
   seniority: "junior" | "mid" | "senior" | "lead" | "principal"
   roles: string[]
@@ -20,6 +22,14 @@ export interface ProfileData {
   github_url: string
   cv_url: string | null
   strengths: string
+  // Founder fields
+  startup_name: string
+  startup_stage: string
+  startup_industry: string[]
+  founder_role: string
+  // Employed fields
+  employer_name: string
+  employer_role: string
 }
 
 export interface ActionResult {
@@ -38,40 +48,100 @@ export async function updateProfile(
     return { success: false, error: "El estado de búsqueda es requerido" }
   }
 
-  // Validate salary range
-  if (data.salary_min && data.salary_max && data.salary_max < data.salary_min) {
-    return { success: false, error: "El salario máximo debe ser mayor al mínimo" }
+  if (!data.user_type) {
+    return { success: false, error: "El tipo de usuario es requerido" }
   }
 
-  // Validate LinkedIn URL
-  if (data.linkedin_url && !data.linkedin_url.includes("linkedin.com")) {
-    return { success: false, error: "Ingresa una URL de LinkedIn válida" }
+  // Flow-specific validations
+  if (data.user_type === "founder") {
+    if (!data.startup_name?.trim()) {
+      return { success: false, error: "El nombre de la startup es requerido" }
+    }
+    if (!data.founder_role?.trim()) {
+      return { success: false, error: "Tu rol en la startup es requerido" }
+    }
   }
 
-  // Validate strengths length
-  if (data.strengths && data.strengths.length > 500) {
-    return { success: false, error: "Las fortalezas no pueden exceder 500 caracteres" }
+  if (data.user_type === "employed") {
+    if (!data.employer_name?.trim()) {
+      return { success: false, error: "El nombre de la empresa es requerido" }
+    }
+    if (!data.employer_role?.trim()) {
+      return { success: false, error: "Tu rol actual es requerido" }
+    }
   }
 
-  const updatePayload = {
+  // Seeker-specific validations
+  if (data.user_type === "seeker") {
+    // Validate salary range
+    if (data.salary_min && data.salary_max && data.salary_max < data.salary_min) {
+      return { success: false, error: "El salario máximo debe ser mayor al mínimo" }
+    }
+
+    // Validate LinkedIn URL
+    if (data.linkedin_url && !data.linkedin_url.includes("linkedin.com")) {
+      return { success: false, error: "Ingresa una URL de LinkedIn válida" }
+    }
+
+    // Validate strengths length
+    if (data.strengths && data.strengths.length > 500) {
+      return { success: false, error: "Las fortalezas no pueden exceder 500 caracteres" }
+    }
+  }
+
+  const updatePayload: Record<string, unknown> = {
     search_status: data.search_status,
-    current_position: data.current_position,
-    seniority: data.seniority,
-    roles: data.roles,
-    industries: data.industries,
-    tools: data.tools,
-    city: data.city,
-    full_time: data.full_time,
-    company_type: data.company_type,
-    salary_min: data.salary_min,
-    salary_max: data.salary_max,
-    salary_currency: data.salary_currency,
-    linkedin_url: data.linkedin_url,
-    portfolio_url: data.portfolio_url,
-    github_url: data.github_url,
-    cv_url: data.cv_url,
-    strengths: data.strengths,
+    user_type: data.user_type,
     profile_last_updated_at: new Date().toISOString(),
+  }
+
+  if (data.user_type === "seeker") {
+    // Include all seeker fields
+    Object.assign(updatePayload, {
+      current_position: data.current_position,
+      seniority: data.seniority,
+      roles: data.roles,
+      industries: data.industries,
+      tools: data.tools,
+      city: data.city,
+      full_time: data.full_time,
+      company_type: data.company_type,
+      salary_min: data.salary_min,
+      salary_max: data.salary_max,
+      salary_currency: data.salary_currency,
+      linkedin_url: data.linkedin_url,
+      portfolio_url: data.portfolio_url,
+      github_url: data.github_url,
+      cv_url: data.cv_url,
+      strengths: data.strengths,
+      // Clear other flow fields
+      startup_name: null,
+      startup_stage: null,
+      startup_industry: null,
+      founder_role: null,
+      employer_name: null,
+      employer_role: null,
+    })
+  } else if (data.user_type === "founder") {
+    Object.assign(updatePayload, {
+      startup_name: data.startup_name,
+      startup_stage: data.startup_stage,
+      startup_industry: data.startup_industry,
+      founder_role: data.founder_role,
+      // Clear employed fields
+      employer_name: null,
+      employer_role: null,
+    })
+  } else if (data.user_type === "employed") {
+    Object.assign(updatePayload, {
+      employer_name: data.employer_name,
+      employer_role: data.employer_role,
+      // Clear founder fields
+      startup_name: null,
+      startup_stage: null,
+      startup_industry: null,
+      founder_role: null,
+    })
   }
 
   console.log("[updateProfile] Token:", token)

@@ -118,6 +118,13 @@ const SENIORITY_OPTIONS = [
   { value: "principal", label: "Principal" },
 ]
 
+const STARTUP_STAGE_OPTIONS = [
+  { value: "pre_seed", label: "Pre-seed" },
+  { value: "seed", label: "Seed" },
+  { value: "series_a", label: "Serie A" },
+  { value: "series_b_plus", label: "Serie B+" },
+]
+
 function ErrorMessage({ message }: { message: string }) {
   return (
     <div className="flex items-center gap-2 text-[#FCA5A5] text-sm mt-2">
@@ -135,7 +142,7 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
   const { toast } = useToast()
 
   // Form state
-  const [searchStatus, setSearchStatus] = useState<"actively_seeking" | "open_to_offers" | "">(
+  const [searchStatus, setSearchStatus] = useState<"actively_seeking" | "open_to_offers" | "not_looking" | "">(
     initialData.search_status || ""
   )
   const [currentRole, setCurrentRole] = useState(initialData.current_position || "")
@@ -156,6 +163,17 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
   const [cvFileName, setCvFileName] = useState("")
   const [strengths, setStrengths] = useState(initialData.strengths || "")
 
+  // Conditional flow state
+  const [flowType, setFlowType] = useState<"seeker" | "founder" | "employed">(
+    (initialData as any).user_type || "seeker"
+  )
+  const [startupName, setStartupName] = useState((initialData as any).startup_name || "")
+  const [startupStage, setStartupStage] = useState((initialData as any).startup_stage || "")
+  const [startupIndustry, setStartupIndustry] = useState<string[]>((initialData as any).startup_industry || [])
+  const [founderRole, setFounderRole] = useState((initialData as any).founder_role || "")
+  const [employerName, setEmployerName] = useState((initialData as any).employer_name || "")
+  const [employerRole, setEmployerRole] = useState((initialData as any).employer_role || "")
+
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {}
 
@@ -163,16 +181,30 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
       newErrors.search_status = "Selecciona tu estado de búsqueda"
     }
 
-    if (salaryMin && salaryMax && Number(salaryMax) < Number(salaryMin)) {
-      newErrors.salary = "El máximo debe ser mayor al mínimo"
+    if (searchStatus === "not_looking" && flowType !== "founder" && flowType !== "employed") {
+      newErrors.flow_type = "Selecciona tu situación actual"
     }
 
-    if (linkedinUrl && !linkedinUrl.includes("linkedin.com")) {
-      newErrors.linkedin = "Ingresa una URL de LinkedIn válida"
+    if (flowType === "founder") {
+      if (!startupName.trim()) newErrors.startup_name = "El nombre de la startup es requerido"
+      if (!founderRole.trim()) newErrors.founder_role = "Tu rol es requerido"
     }
 
-    if (strengths.length > 500) {
-      newErrors.strengths = "Máximo 500 caracteres"
+    if (flowType === "employed") {
+      if (!employerName.trim()) newErrors.employer_name = "El nombre de la empresa es requerido"
+      if (!employerRole.trim()) newErrors.employer_role = "Tu rol es requerido"
+    }
+
+    if (flowType === "seeker") {
+      if (salaryMin && salaryMax && Number(salaryMax) < Number(salaryMin)) {
+        newErrors.salary = "El máximo debe ser mayor al mínimo"
+      }
+      if (linkedinUrl && !linkedinUrl.includes("linkedin.com")) {
+        newErrors.linkedin = "Ingresa una URL de LinkedIn válida"
+      }
+      if (strengths.length > 500) {
+        newErrors.strengths = "Máximo 500 caracteres"
+      }
     }
 
     setErrors(newErrors)
@@ -242,7 +274,8 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
 
     startTransition(async () => {
       const data: ProfileData = {
-        search_status: searchStatus as "actively_seeking" | "open_to_offers",
+        search_status: searchStatus as ProfileData["search_status"],
+        user_type: flowType,
         current_position: currentRole,
         seniority: seniority as ProfileData["seniority"],
         roles,
@@ -259,6 +292,12 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
         github_url: githubUrl,
         cv_url: cvUrl || null,
         strengths,
+        startup_name: startupName,
+        startup_stage: startupStage,
+        startup_industry: startupIndustry,
+        founder_role: founderRole,
+        employer_name: employerName,
+        employer_role: employerRole,
       }
 
       const result = await updateProfile(token, data)
@@ -280,7 +319,8 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
       <ConfirmationView
         name={initialData.name || "Maker"}
         data={{
-          search_status: searchStatus as "actively_seeking" | "open_to_offers",
+          search_status: searchStatus as ProfileData["search_status"],
+          user_type: flowType,
           current_position: currentRole,
           seniority: seniority as ProfileData["seniority"],
           roles,
@@ -297,6 +337,12 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
           github_url: githubUrl,
           cv_url: cvUrl || null,
           strengths,
+          startup_name: startupName,
+          startup_stage: startupStage,
+          startup_industry: startupIndustry,
+          founder_role: founderRole,
+          employer_name: employerName,
+          employer_role: employerRole,
         }}
         onEdit={() => setSubmitted(false)}
       />
@@ -332,7 +378,7 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
           <div className="grid gap-4 sm:grid-cols-2">
             <button
               type="button"
-              onClick={() => setSearchStatus("actively_seeking")}
+              onClick={() => { setSearchStatus("actively_seeking"); setFlowType("seeker"); }}
               className={cn(
                 "flex flex-col items-start p-4 rounded-xl border-2 transition-all min-h-[88px]",
                 "focus:outline-none focus:ring-2 focus:ring-[#86EFAC] focus:ring-offset-2 focus:ring-offset-[#0F1729]",
@@ -348,7 +394,7 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
             </button>
             <button
               type="button"
-              onClick={() => setSearchStatus("open_to_offers")}
+              onClick={() => { setSearchStatus("open_to_offers"); setFlowType("seeker"); }}
               className={cn(
                 "flex flex-col items-start p-4 rounded-xl border-2 transition-all min-h-[88px]",
                 "focus:outline-none focus:ring-2 focus:ring-[#86EFAC] focus:ring-offset-2 focus:ring-offset-[#0F1729]",
@@ -363,10 +409,187 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
               </span>
             </button>
           </div>
+          <button
+            type="button"
+            onClick={() => setSearchStatus("not_looking")}
+            className={cn(
+              "w-full flex flex-col items-start p-4 rounded-xl border-2 transition-all",
+              "focus:outline-none focus:ring-2 focus:ring-[#86EFAC] focus:ring-offset-2 focus:ring-offset-[#0F1729]",
+              searchStatus === "not_looking"
+                ? "border-[#86EFAC] bg-[#86EFAC]/10"
+                : "border-[#1e3a5f] hover:border-[#86EFAC]/50"
+            )}
+          >
+            <span className="font-semibold text-white">No busco trabajo</span>
+            <span className="text-sm text-[#C7D2FE] mt-1">
+              Estoy empleado o soy founder, no busco activamente
+            </span>
+          </button>
           {errors.search_status && <ErrorMessage message={errors.search_status} />}
         </CardContent>
       </Card>
 
+      {/* Sub-question: Founder or Employed? */}
+      {searchStatus === "not_looking" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-xl font-extrabold">¿Sos founder de una startup?</CardTitle>
+            <CardDescription>Contanos más sobre tu situación actual</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setFlowType("founder")}
+                className={cn(
+                  "flex flex-col items-start p-4 rounded-xl border-2 transition-all min-h-[88px]",
+                  "focus:outline-none focus:ring-2 focus:ring-[#86EFAC] focus:ring-offset-2 focus:ring-offset-[#0F1729]",
+                  flowType === "founder"
+                    ? "border-[#86EFAC] bg-[#86EFAC]/10"
+                    : "border-[#1e3a5f] hover:border-[#86EFAC]/50"
+                )}
+              >
+                <span className="font-semibold text-white">Sí, soy founder</span>
+                <span className="text-sm text-[#C7D2FE] mt-1">
+                  Tengo mi propia startup o emprendimiento
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFlowType("employed")}
+                className={cn(
+                  "flex flex-col items-start p-4 rounded-xl border-2 transition-all min-h-[88px]",
+                  "focus:outline-none focus:ring-2 focus:ring-[#86EFAC] focus:ring-offset-2 focus:ring-offset-[#0F1729]",
+                  flowType === "employed"
+                    ? "border-[#86EFAC] bg-[#86EFAC]/10"
+                    : "border-[#1e3a5f] hover:border-[#86EFAC]/50"
+                )}
+              >
+                <span className="font-semibold text-white">No, estoy empleado en otra empresa</span>
+                <span className="text-sm text-[#C7D2FE] mt-1">
+                  Trabajo en relación de dependencia
+                </span>
+              </button>
+            </div>
+            {errors.flow_type && <ErrorMessage message={errors.flow_type} />}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* FOUNDER FLOW */}
+      {searchStatus === "not_looking" && flowType === "founder" && (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xl font-extrabold">Sobre tu startup</CardTitle>
+              <CardDescription>Contanos sobre tu emprendimiento</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="startup_name" className="text-white">
+                  Nombre de la startup *
+                </Label>
+                <Input
+                  id="startup_name"
+                  value={startupName}
+                  onChange={(e) => setStartupName(e.target.value)}
+                  placeholder="Ej: Mi Startup"
+                  className="bg-[#1a2340] border-[#1e3a5f] text-white placeholder:text-[#C7D2FE]/60"
+                />
+                {errors.startup_name && <ErrorMessage message={errors.startup_name} />}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="startup_stage" className="text-white">
+                  Etapa
+                </Label>
+                <Select value={startupStage} onValueChange={setStartupStage}>
+                  <SelectTrigger className="bg-[#1a2340] border-[#1e3a5f] text-white w-full">
+                    <SelectValue placeholder="Selecciona la etapa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STARTUP_STAGE_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-white">Industria</Label>
+                <PillSelect
+                  options={INDUSTRIES_OPTIONS}
+                  value={startupIndustry}
+                  onChange={setStartupIndustry}
+                  max={5}
+                  showCount
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xl font-extrabold">Tu rol</CardTitle>
+              <CardDescription>¿Qué hacés en tu startup?</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Label htmlFor="founder_role" className="text-white">
+                Rol en la startup *
+              </Label>
+              <Input
+                id="founder_role"
+                value={founderRole}
+                onChange={(e) => setFounderRole(e.target.value)}
+                placeholder="Ej: CEO, CTO, CPO"
+                className="bg-[#1a2340] border-[#1e3a5f] text-white placeholder:text-[#C7D2FE]/60"
+              />
+              {errors.founder_role && <ErrorMessage message={errors.founder_role} />}
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {/* EMPLOYED FLOW */}
+      {searchStatus === "not_looking" && flowType === "employed" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-xl font-extrabold">Tu empleo actual</CardTitle>
+            <CardDescription>Contanos dónde estás trabajando</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="employer_name" className="text-white">
+                Nombre de la empresa *
+              </Label>
+              <Input
+                id="employer_name"
+                value={employerName}
+                onChange={(e) => setEmployerName(e.target.value)}
+                placeholder="Ej: Mercado Libre"
+                className="bg-[#1a2340] border-[#1e3a5f] text-white placeholder:text-[#C7D2FE]/60"
+              />
+              {errors.employer_name && <ErrorMessage message={errors.employer_name} />}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="employer_role" className="text-white">
+                Tu rol actual *
+              </Label>
+              <Input
+                id="employer_role"
+                value={employerRole}
+                onChange={(e) => setEmployerRole(e.target.value)}
+                placeholder="Ej: Senior Software Engineer"
+                className="bg-[#1a2340] border-[#1e3a5f] text-white placeholder:text-[#C7D2FE]/60"
+              />
+              {errors.employer_role && <ErrorMessage message={errors.employer_role} />}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* SEEKER FLOW */}
+      {flowType === "seeker" && searchStatus !== "not_looking" && (<>
       {/* Section 2: Professional Profile */}
       <Card>
         <CardHeader>
@@ -691,6 +914,7 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
           </div>
         </CardContent>
       </Card>
+      </>)}
 
       {/* Submit Button - Sticky on mobile */}
       <div className="sticky bottom-0 bg-[#0F1729] py-4 -mx-4 px-4 sm:static sm:bg-transparent sm:py-0 sm:mx-0 sm:px-0">
@@ -704,8 +928,14 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
               <Loader2 className="size-5 animate-spin" />
               Guardando...
             </>
+          ) : flowType === "founder" ? (
+            "Guardar como founder"
+          ) : flowType === "employed" ? (
+            "Guardar como empleado"
+          ) : searchStatus === "not_looking" ? (
+            "Confirmar estado"
           ) : (
-            "Guardar perfil"
+            "Guardar y activar mi perfil"
           )}
         </Button>
       </div>

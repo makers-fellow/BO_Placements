@@ -69,6 +69,13 @@ export default async function ProfilePage({ params }: PageProps) {
             github_url: maker.github_url,
             cv_url: maker.cv_url,
             strengths: maker.strengths,
+            user_type: maker.user_type || "seeker",
+            startup_name: maker.startup_name,
+            startup_stage: maker.startup_stage,
+            startup_industry: maker.startup_industry || [],
+            founder_role: maker.founder_role,
+            employer_name: maker.employer_name,
+            employer_role: maker.employer_role,
           }}
         />
       </div>

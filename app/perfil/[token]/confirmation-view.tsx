@@ -71,6 +71,13 @@ const TOOLS_MAP: Record<string, string> = {
   docker: "Docker",
 }
 
+const STARTUP_STAGE_MAP: Record<string, string> = {
+  pre_seed: "Pre-seed",
+  seed: "Seed",
+  series_a: "Serie A",
+  series_b_plus: "Serie B+",
+}
+
 interface ConfirmationViewProps {
   name: string
   data: ProfileData
@@ -107,6 +114,22 @@ function PillList({ items, map }: { items: string[]; map: Record<string, string>
   )
 }
 
+function StatusBadge({ userType }: { userType: string }) {
+  const config: Record<string, { label: string; color: string; bg: string; border: string }> = {
+    seeker: { label: "Buscando oportunidades", color: "text-[#86EFAC]", bg: "bg-[#86EFAC]/10", border: "border-[#86EFAC]/30" },
+    founder: { label: "Founder", color: "text-[#C7D2FE]", bg: "bg-[#C7D2FE]/10", border: "border-[#C7D2FE]/30" },
+    employed: { label: "Empleado", color: "text-[#C7D2FE]", bg: "bg-[#C7D2FE]/10", border: "border-[#C7D2FE]/30" },
+  }
+  const c = config[userType] || config.seeker
+
+  return (
+    <div className={`flex items-center gap-3 p-4 rounded-xl ${c.bg} border ${c.border}`}>
+      {userType === "seeker" && <div className="w-3 h-3 rounded-full bg-[#86EFAC] animate-pulse" />}
+      <span className={`font-medium ${c.color}`}>{c.label}</span>
+    </div>
+  )
+}
+
 export function ConfirmationView({ name, data, onEdit }: ConfirmationViewProps) {
   const formatSalary = () => {
     if (!data.salary_min && !data.salary_max) return null
@@ -114,6 +137,8 @@ export function ConfirmationView({ name, data, onEdit }: ConfirmationViewProps) 
     const max = data.salary_max?.toLocaleString() || "N/A"
     return `${data.salary_currency} ${min} - ${max}`
   }
+
+  const userType = data.user_type || "seeker"
 
   return (
     <div className="space-y-6">
@@ -145,131 +170,156 @@ export function ConfirmationView({ name, data, onEdit }: ConfirmationViewProps) 
           </Button>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Status */}
-          <div className="flex items-center gap-3 p-4 rounded-xl bg-[#86EFAC]/10 border border-[#86EFAC]/30">
-            <div className="w-3 h-3 rounded-full bg-[#86EFAC] animate-pulse" />
-            <span className="text-white font-medium">
-              {data.search_status === "actively_seeking"
-                ? "Buscando activamente"
-                : "Abierto a ofertas"}
-            </span>
-          </div>
+          {/* Status Badge */}
+          <StatusBadge userType={userType} />
 
-          {/* Professional Info */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <InfoItem label="Rol actual" value={data.current_position} />
-            <InfoItem label="Seniority" value={SENIORITY_MAP[data.seniority]} />
-            <InfoItem label="Ubicación" value={data.city} />
-            <InfoItem
-              label="Disponibilidad"
-              value={data.full_time ? "Tiempo completo" : "Tiempo parcial"}
-            />
-          </div>
+          {/* FOUNDER SUMMARY */}
+          {userType === "founder" && (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <InfoItem label="Startup" value={data.startup_name} />
+                <InfoItem label="Etapa" value={STARTUP_STAGE_MAP[data.startup_stage] || data.startup_stage} />
+                <InfoItem label="Rol" value={data.founder_role} />
+              </div>
+              {data.startup_industry && data.startup_industry.length > 0 && (
+                <div className="space-y-2">
+                  <span className="text-xs uppercase tracking-wider text-[#C7D2FE] font-medium">
+                    Industria
+                  </span>
+                  <PillList items={data.startup_industry} map={INDUSTRIES_MAP} />
+                </div>
+              )}
+            </>
+          )}
 
-          {/* Roles */}
-          {data.roles.length > 0 && (
-            <div className="space-y-2">
-              <span className="text-xs uppercase tracking-wider text-[#C7D2FE] font-medium">
-                Roles de interés
-              </span>
-              <PillList items={data.roles} map={ROLES_MAP} />
+          {/* EMPLOYED SUMMARY */}
+          {userType === "employed" && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InfoItem label="Empresa" value={data.employer_name} />
+              <InfoItem label="Rol actual" value={data.employer_role} />
             </div>
           )}
 
-          {/* Industries */}
-          {data.industries.length > 0 && (
-            <div className="space-y-2">
-              <span className="text-xs uppercase tracking-wider text-[#C7D2FE] font-medium">
-                Industrias
-              </span>
-              <PillList items={data.industries} map={INDUSTRIES_MAP} />
-            </div>
-          )}
+          {/* SEEKER SUMMARY */}
+          {userType === "seeker" && (
+            <>
+              {/* Professional Info */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <InfoItem label="Rol actual" value={data.current_position} />
+                <InfoItem label="Seniority" value={SENIORITY_MAP[data.seniority]} />
+                <InfoItem label="Ubicación" value={data.city} />
+                <InfoItem
+                  label="Disponibilidad"
+                  value={data.full_time ? "Tiempo completo" : "Tiempo parcial"}
+                />
+              </div>
 
-          {/* Tools & Skills */}
-          {data.tools.length > 0 && (
-            <div className="space-y-2">
-              <span className="text-xs uppercase tracking-wider text-[#C7D2FE] font-medium">
-                Tools y Skills
-              </span>
-              <PillList items={data.tools} map={TOOLS_MAP} />
-            </div>
-          )}
-
-          {/* Company Type */}
-          {data.company_type.length > 0 && (
-            <div className="space-y-2">
-              <span className="text-xs uppercase tracking-wider text-[#C7D2FE] font-medium">
-                Tipo de empresa
-              </span>
-              <PillList items={data.company_type} map={COMPANY_TYPE_MAP} />
-            </div>
-          )}
-
-          {/* Salary */}
-          <InfoItem label="Pretensión salarial" value={formatSalary()} />
-
-          {/* Links */}
-          <div className="space-y-3">
-            <span className="text-xs uppercase tracking-wider text-[#C7D2FE] font-medium">
-              Links
-            </span>
-            <div className="flex flex-wrap gap-3">
-              {data.linkedin_url && (
-                <a
-                  href={data.linkedin_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[#1e3a5f] text-white hover:border-[#86EFAC] hover:text-[#86EFAC] transition-colors"
-                >
-                  LinkedIn
-                  <ExternalLink className="size-3" />
-                </a>
+              {/* Roles */}
+              {data.roles.length > 0 && (
+                <div className="space-y-2">
+                  <span className="text-xs uppercase tracking-wider text-[#C7D2FE] font-medium">
+                    Roles de interés
+                  </span>
+                  <PillList items={data.roles} map={ROLES_MAP} />
+                </div>
               )}
-              {data.portfolio_url && (
-                <a
-                  href={data.portfolio_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[#1e3a5f] text-white hover:border-[#86EFAC] hover:text-[#86EFAC] transition-colors"
-                >
-                  Portfolio
-                  <ExternalLink className="size-3" />
-                </a>
-              )}
-              {data.github_url && (
-                <a
-                  href={data.github_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[#1e3a5f] text-white hover:border-[#86EFAC] hover:text-[#86EFAC] transition-colors"
-                >
-                  GitHub
-                  <ExternalLink className="size-3" />
-                </a>
-              )}
-              {data.cv_url && (
-                <a
-                  href={data.cv_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[#1e3a5f] text-white hover:border-[#86EFAC] hover:text-[#86EFAC] transition-colors"
-                >
-                  CV
-                  <ExternalLink className="size-3" />
-                </a>
-              )}
-            </div>
-          </div>
 
-          {/* Strengths */}
-          {data.strengths && (
-            <div className="space-y-2">
-              <span className="text-xs uppercase tracking-wider text-[#C7D2FE] font-medium">
-                Fortalezas
-              </span>
-              <p className="text-white whitespace-pre-wrap">{data.strengths}</p>
-            </div>
+              {/* Industries */}
+              {data.industries.length > 0 && (
+                <div className="space-y-2">
+                  <span className="text-xs uppercase tracking-wider text-[#C7D2FE] font-medium">
+                    Industrias
+                  </span>
+                  <PillList items={data.industries} map={INDUSTRIES_MAP} />
+                </div>
+              )}
+
+              {/* Tools & Skills */}
+              {data.tools.length > 0 && (
+                <div className="space-y-2">
+                  <span className="text-xs uppercase tracking-wider text-[#C7D2FE] font-medium">
+                    Tools y Skills
+                  </span>
+                  <PillList items={data.tools} map={TOOLS_MAP} />
+                </div>
+              )}
+
+              {/* Company Type */}
+              {data.company_type.length > 0 && (
+                <div className="space-y-2">
+                  <span className="text-xs uppercase tracking-wider text-[#C7D2FE] font-medium">
+                    Tipo de empresa
+                  </span>
+                  <PillList items={data.company_type} map={COMPANY_TYPE_MAP} />
+                </div>
+              )}
+
+              {/* Salary */}
+              <InfoItem label="Pretensión salarial" value={formatSalary()} />
+
+              {/* Links */}
+              <div className="space-y-3">
+                <span className="text-xs uppercase tracking-wider text-[#C7D2FE] font-medium">
+                  Links
+                </span>
+                <div className="flex flex-wrap gap-3">
+                  {data.linkedin_url && (
+                    <a
+                      href={data.linkedin_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[#1e3a5f] text-white hover:border-[#86EFAC] hover:text-[#86EFAC] transition-colors"
+                    >
+                      LinkedIn
+                      <ExternalLink className="size-3" />
+                    </a>
+                  )}
+                  {data.portfolio_url && (
+                    <a
+                      href={data.portfolio_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[#1e3a5f] text-white hover:border-[#86EFAC] hover:text-[#86EFAC] transition-colors"
+                    >
+                      Portfolio
+                      <ExternalLink className="size-3" />
+                    </a>
+                  )}
+                  {data.github_url && (
+                    <a
+                      href={data.github_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[#1e3a5f] text-white hover:border-[#86EFAC] hover:text-[#86EFAC] transition-colors"
+                    >
+                      GitHub
+                      <ExternalLink className="size-3" />
+                    </a>
+                  )}
+                  {data.cv_url && (
+                    <a
+                      href={data.cv_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[#1e3a5f] text-white hover:border-[#86EFAC] hover:text-[#86EFAC] transition-colors"
+                    >
+                      CV
+                      <ExternalLink className="size-3" />
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Strengths */}
+              {data.strengths && (
+                <div className="space-y-2">
+                  <span className="text-xs uppercase tracking-wider text-[#C7D2FE] font-medium">
+                    Fortalezas
+                  </span>
+                  <p className="text-white whitespace-pre-wrap">{data.strengths}</p>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
