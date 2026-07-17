@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { LogOut, ShieldAlert } from 'lucide-react'
+import { LogOut, ShieldAlert, MessageCircle } from 'lucide-react'
 import { logout } from '@/app/(auth)/actions'
 
 export function Navbar({ userEmail, isAdmin = false }: { userEmail?: string, isAdmin?: boolean }) {
@@ -20,12 +20,20 @@ export function Navbar({ userEmail, isAdmin = false }: { userEmail?: string, isA
         
         <div className="flex items-center gap-4">
           {isAdmin && (
-            <Link href="/admin">
-              <Button variant="ghost" size="sm" className="text-[#94a3b8] hover:text-white hover:bg-[#1e293b]">
-                <ShieldAlert className="size-4 mr-2" />
-                <span className="hidden sm:inline">Admin</span>
-              </Button>
-            </Link>
+            <>
+              <Link href="/campaigns">
+                <Button variant="ghost" size="sm" className="text-[#94a3b8] hover:text-white hover:bg-[#1e293b]">
+                  <MessageCircle className="size-4 mr-2" />
+                  <span className="hidden sm:inline">Campañas</span>
+                </Button>
+              </Link>
+              <Link href="/admin">
+                <Button variant="ghost" size="sm" className="text-[#94a3b8] hover:text-white hover:bg-[#1e293b]">
+                  <ShieldAlert className="size-4 mr-2" />
+                  <span className="hidden sm:inline">Admin</span>
+                </Button>
+              </Link>
+            </>
           )}
           
           <div className="flex items-center gap-4 border-l border-[#1e3a5f] pl-4 ml-2">

@@ -15,6 +15,13 @@ Panel interno de Makers Fellowship para gestionar candidatos ("makers") en proce
 - `middleware.ts` protege todas las rutas excepto `/login`, `/register`, `/perfil/*` y `/auth/*`.
 - `app/candidates-table.tsx` lista los candidatos de la tabla `placements_makers` con filtros por cohorte, ordenamiento por última actualización, y botón directo a WhatsApp.
 
+### Campañas de WhatsApp (`/campaigns`, solo admin)
+- Lista makers cuyo perfil no se ha actualizado en 30/60/90 días (basado en `profile_last_updated_at`, con fallback a `updated_at`), excluyendo por defecto `user_type = 'employed'` y `search_status = 'not_looking'`.
+- Permite elegir un template aprobado de WhatsApp (vía [Kapso](https://kapso.ai), proxy de la API de WhatsApp Cloud de Meta) y enviarlo masivamente a los makers seleccionados como recordatorio para que verifiquen si siguen buscando trabajo.
+- El template debe usar los parámetros nombrados `first_name` y `profile_url`; ambos se completan automáticamente con el link mágico del maker.
+- Cada envío queda registrado en `whatsapp_campaigns` / `whatsapp_campaign_messages`, y actualiza `placements_makers.last_reminder_sent_at` para evitar reenvíos innecesarios.
+- Los templates se crean y aprueban fuera de la app, en el dashboard de Kapso/Meta — la app solo los lista y los usa para enviar.
+
 ### Perfil público del maker (`/perfil/[token]`)
 - Cada maker recibe un enlace único con un `magic_link_token` (columna en `placements_makers`) que le permite editar su propio perfil **sin necesidad de cuenta/login**.
 - Formulario condicional (`app/perfil/[token]/profile-form.tsx`) según `user_type`:
@@ -30,10 +37,12 @@ app/
   (auth)/          # login, registro, server actions de auth
   admin/            # panel de aprobación de usuarios (solo admin)
   auth/callback/    # callback de confirmación de email (Supabase)
+  campaigns/        # campañas de WhatsApp vía Kapso (solo admin)
   perfil/[token]/   # formulario público de perfil (magic link)
   page.tsx          # dashboard principal de candidatos
 components/ui/      # componentes shadcn/ui
 lib/supabase/        # clientes Supabase (browser y server)
+lib/kapso/            # cliente Kapso + helpers de templates de WhatsApp
 scripts/              # migraciones SQL para correr manualmente en Supabase
 middleware.ts          # protección de rutas + refresco de sesión
 ```
@@ -43,12 +52,14 @@ middleware.ts          # protección de rutas + refresco de sesión
 Tablas principales:
 - **`placements_makers`**: datos de cada maker/candidato, incluye `magic_link_token`, `user_type`, `search_status` (enum), y columnas condicionales de founder/employed.
 - **`dashboard_users`**: usuarios del dashboard interno, vinculados a `auth.users` vía `auth_id`, con `status` (`pending`/`approved`/`rejected`) y `role` (`viewer`/`admin`).
+- **`whatsapp_campaigns`** / **`whatsapp_campaign_messages`**: historial de campañas de recordatorio por WhatsApp y el estado de envío por destinatario.
 
 Las migraciones en `scripts/*.sql` no se aplican automáticamente — hay que correrlas manualmente en el SQL Editor de Supabase:
 - `auth_setup.sql` — crea `dashboard_users` + políticas RLS
 - `enable_rls_policies.sql` — políticas RLS de `placements_makers` (lectura pública, update vía token)
 - `add_user_type_columns.sql` — columnas de flujo condicional seeker/founder/employed
 - `add_not_looking_enum.sql` — agrega el valor `not_looking` al enum `search_status`
+- `create_whatsapp_campaigns.sql` — tablas de campañas de WhatsApp + columna `last_reminder_sent_at` en `placements_makers`
 
 ## Desarrollo local
 
@@ -62,7 +73,12 @@ npm run dev
 ```
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
-NEXT_PUBLIC_SITE_URL=       # usado como emailRedirectTo en el registro
+NEXT_PUBLIC_SITE_URL=       # usado como emailRedirectTo en el registro y en los links de perfil enviados por WhatsApp
+
+# Kapso (WhatsApp) — server-only, nunca exponer con NEXT_PUBLIC_
+KAPSO_API_KEY=
+KAPSO_PHONE_NUMBER_ID=      # phone_number_id de Meta (número conectado en Kapso)
+KAPSO_BUSINESS_ACCOUNT_ID=  # WABA id, necesario para listar templates
 ```
 
 ## Notas
