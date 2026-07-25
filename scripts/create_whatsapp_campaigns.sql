@@ -1,5 +1,9 @@
 -- Migration: WhatsApp campaigns (Kapso) for stale-profile reminders
 -- Run this in Supabase SQL Editor
+--
+-- Idempotente: se puede correr varias veces. Las tablas usan IF NOT EXISTS y las
+-- policies llevan DROP IF EXISTS delante, porque Postgres no soporta
+-- CREATE POLICY IF NOT EXISTS y re-correr el script daba error 42710.
 
 -- Track when a maker was last reminded via WhatsApp
 ALTER TABLE placements_makers
@@ -40,6 +44,7 @@ CREATE INDEX IF NOT EXISTS idx_whatsapp_campaign_messages_campaign_id
 ALTER TABLE whatsapp_campaigns ENABLE ROW LEVEL SECURITY;
 ALTER TABLE whatsapp_campaign_messages ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Admins can read campaigns" ON whatsapp_campaigns;
 CREATE POLICY "Admins can read campaigns"
   ON whatsapp_campaigns FOR SELECT
   USING (
@@ -51,6 +56,7 @@ CREATE POLICY "Admins can read campaigns"
     )
   );
 
+DROP POLICY IF EXISTS "Admins can insert campaigns" ON whatsapp_campaigns;
 CREATE POLICY "Admins can insert campaigns"
   ON whatsapp_campaigns FOR INSERT
   WITH CHECK (
@@ -62,6 +68,7 @@ CREATE POLICY "Admins can insert campaigns"
     )
   );
 
+DROP POLICY IF EXISTS "Admins can update campaigns" ON whatsapp_campaigns;
 CREATE POLICY "Admins can update campaigns"
   ON whatsapp_campaigns FOR UPDATE
   USING (
@@ -81,6 +88,7 @@ CREATE POLICY "Admins can update campaigns"
     )
   );
 
+DROP POLICY IF EXISTS "Admins can read campaign messages" ON whatsapp_campaign_messages;
 CREATE POLICY "Admins can read campaign messages"
   ON whatsapp_campaign_messages FOR SELECT
   USING (
@@ -92,6 +100,7 @@ CREATE POLICY "Admins can read campaign messages"
     )
   );
 
+DROP POLICY IF EXISTS "Admins can insert campaign messages" ON whatsapp_campaign_messages;
 CREATE POLICY "Admins can insert campaign messages"
   ON whatsapp_campaign_messages FOR INSERT
   WITH CHECK (
@@ -103,6 +112,7 @@ CREATE POLICY "Admins can insert campaign messages"
     )
   );
 
+DROP POLICY IF EXISTS "Admins can update campaign messages" ON whatsapp_campaign_messages;
 CREATE POLICY "Admins can update campaign messages"
   ON whatsapp_campaign_messages FOR UPDATE
   USING (
