@@ -1,6 +1,7 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/service"
+import { CV_BUCKET, cvPathFromUrl } from "@/lib/supabase/storage"
 
 export interface ProfileData {
   search_status: "actively_seeking" | "open_to_offers" | "not_looking"
@@ -41,7 +42,9 @@ export async function updateProfile(
   token: string,
   data: ProfileData
 ): Promise<ActionResult> {
-  const supabase = await createClient()
+  // La tabla y el bucket están cerrados a anon: el token es la credencial
+  // y se valida en la propia consulta (.eq("magic_link_token", token)).
+  const supabase = createServiceClient()
 
   // Validate required fields
   if (!data.search_status) {
@@ -175,7 +178,9 @@ export async function uploadCV(
   token: string,
   formData: FormData
 ): Promise<{ success: boolean; url?: string; error?: string }> {
-  const supabase = await createClient()
+  // La tabla y el bucket están cerrados a anon: el token es la credencial
+  // y se valida en la propia consulta (.eq("magic_link_token", token)).
+  const supabase = createServiceClient()
   const file = formData.get("cv") as File
 
   if (!file) {
@@ -195,7 +200,7 @@ export async function uploadCV(
   const fileName = `${token}-${Date.now()}.pdf`
 
   const { error: uploadError } = await supabase.storage
-    .from("CVs Makers")
+    .from(CV_BUCKET)
     .upload(fileName, file, {
       contentType: "application/pdf",
       upsert: true,
@@ -206,7 +211,10 @@ export async function uploadCV(
     return { success: false, error: "Error al subir el archivo. Intenta de nuevo." }
   }
 
-  const { data: urlData } = supabase.storage.from("CVs Makers").getPublicUrl(fileName)
+  // El bucket es privado, así que esta URL no resuelve por sí sola: se sigue
+  // guardando en cv_url como identificador estable del archivo, y quien la
+  // necesita abrir pide una signed URL (dashboard) o pasa por /perfil/<token>/cv.
+  const { data: urlData } = supabase.storage.from(CV_BUCKET).getPublicUrl(fileName)
 
   return { success: true, url: urlData.publicUrl }
 }
@@ -215,16 +223,17 @@ export async function deleteCV(
   token: string,
   cvUrl: string
 ): Promise<ActionResult> {
-  const supabase = await createClient()
+  // La tabla y el bucket están cerrados a anon: el token es la credencial
+  // y se valida en la propia consulta (.eq("magic_link_token", token)).
+  const supabase = createServiceClient()
 
-  // Extract filename from URL
-  const fileName = cvUrl.split("/").pop()
-  
+  const fileName = cvPathFromUrl(cvUrl)
+
   if (!fileName) {
     return { success: false, error: "URL de archivo inválida" }
   }
 
-  const { error } = await supabase.storage.from("CVs Makers").remove([fileName])
+  const { error } = await supabase.storage.from(CV_BUCKET).remove([fileName])
 
   if (error) {
     console.error("Error deleting CV:", error)

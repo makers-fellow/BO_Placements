@@ -318,6 +318,7 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
     return (
       <ConfirmationView
         name={initialData.name || "Maker"}
+        cvHref={`/perfil/${token}/cv`}
         data={{
           search_status: searchStatus as ProfileData["search_status"],
           user_type: flowType,

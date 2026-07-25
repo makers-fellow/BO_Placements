@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/service"
+import { signCVUrls } from "@/lib/supabase/storage"
 import { CandidatesTable } from "./candidates-table"
 import { Navbar } from "@/components/navbar"
 
@@ -34,7 +36,9 @@ export default async function HomePage() {
     }
 
     if (userStatus === 'approved') {
-      const { data, error } = await supabase
+      // service_role: `placements_makers` está cerrada a anon/authenticated.
+      // El acceso ya quedó autorizado arriba (sesión + status 'approved').
+      const { data, error } = await createServiceClient()
       .from("placements_makers")
       .select("*")
       .order("created_at", { ascending: false })
@@ -43,6 +47,12 @@ export default async function HomePage() {
       fetchError = error.message
       } else {
         makers = data || []
+
+        // El bucket de CVs es privado: los links del dashboard van firmados.
+        const signed = await signCVUrls(makers.map((m) => m.cv_url))
+        makers = makers.map((m) =>
+          m.cv_url ? { ...m, cv_url: signed.get(m.cv_url) ?? null } : m,
+        )
       }
     }
   } catch (err: any) {

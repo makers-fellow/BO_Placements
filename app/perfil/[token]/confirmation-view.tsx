@@ -82,6 +82,11 @@ interface ConfirmationViewProps {
   name: string
   data: ProfileData
   onEdit: () => void
+  /**
+   * Ruta que redirige al CV con una signed URL fresca. `data.cv_url` es solo un
+   * identificador del archivo en un bucket privado: no se puede abrir directo.
+   */
+  cvHref?: string
 }
 
 function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
@@ -130,7 +135,7 @@ function StatusBadge({ userType }: { userType: string }) {
   )
 }
 
-export function ConfirmationView({ name, data, onEdit }: ConfirmationViewProps) {
+export function ConfirmationView({ name, data, onEdit, cvHref }: ConfirmationViewProps) {
   const formatSalary = () => {
     if (!data.salary_min && !data.salary_max) return null
     const min = data.salary_min?.toLocaleString() || "N/A"
@@ -296,9 +301,9 @@ export function ConfirmationView({ name, data, onEdit }: ConfirmationViewProps) 
                       <ExternalLink className="size-3" />
                     </a>
                   )}
-                  {data.cv_url && (
+                  {data.cv_url && cvHref && (
                     <a
-                      href={data.cv_url}
+                      href={cvHref}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[#1e3a5f] text-white hover:border-[#86EFAC] hover:text-[#86EFAC] transition-colors"

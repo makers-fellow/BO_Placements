@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/service"
 import { ProfileForm } from "./profile-form"
 import { Card, CardContent } from "@/components/ui/card"
 import { AlertCircle } from "lucide-react"
@@ -9,7 +9,9 @@ interface PageProps {
 
 export default async function ProfilePage({ params }: PageProps) {
   const { token } = await params
-  const supabase = await createClient()
+  // No hay sesión acá: el maker se autentica con el magic_link_token, y la tabla
+  // está cerrada a anon, así que la lectura va por service_role filtrada por token.
+  const supabase = createServiceClient()
 
   const { data: maker, error } = await supabase
     .from("placements_makers")

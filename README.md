@@ -20,6 +20,8 @@ Panel interno de Makers Fellowship para gestionar candidatos ("makers") en proce
 - Permite elegir un template aprobado de WhatsApp (vía [Kapso](https://kapso.ai), proxy de la API de WhatsApp Cloud de Meta) y enviarlo masivamente a los makers seleccionados como recordatorio para que verifiquen si siguen buscando trabajo.
 - El template debe usar los parámetros nombrados `first_name` y `profile_url`; ambos se completan automáticamente con el link mágico del maker.
 - Cada envío queda registrado en `whatsapp_campaigns` / `whatsapp_campaign_messages`, y actualiza `placements_makers.last_reminder_sent_at` para evitar reenvíos innecesarios.
+- El envío va **por lotes**: `createCampaign` crea la campaña con un mensaje `pending` por destinatario y el cliente llama a `sendCampaignBatch` en bucle (25 por request) hasta terminar. Como cada lote toma los que siguen en `pending`, un envío interrumpido se reanuda sin duplicar mensajes.
+- `app/api/whatsapp/webhook/route.ts` recibe los eventos de Kapso (`whatsapp.message.delivered/read/failed`), valida la firma HMAC con `KAPSO_WEBHOOK_SECRET` y actualiza el estado real de cada mensaje. Hay que registrarlo en Kapso como webhook **del número de teléfono** (los eventos de mensajes no llegan por webhooks de proyecto) apuntando a `https://<host>/api/whatsapp/webhook`.
 - Los templates se crean y aprueban fuera de la app, en el dashboard de Kapso/Meta — la app solo los lista y los usa para enviar.
 
 ### Perfil público del maker (`/perfil/[token]`)
@@ -56,10 +58,14 @@ Tablas principales:
 
 Las migraciones en `scripts/*.sql` no se aplican automáticamente — hay que correrlas manualmente en el SQL Editor de Supabase:
 - `auth_setup.sql` — crea `dashboard_users` + políticas RLS
-- `enable_rls_policies.sql` — políticas RLS de `placements_makers` (lectura pública, update vía token)
+- `enable_rls_policies.sql` — políticas RLS originales de `placements_makers` (lectura y update públicos) — **reemplazado por los `lock_down_*.sql`**
+- `lock_down_placements_rls.sql` — cierra `placements_makers` a `anon`/`authenticated`; el acceso pasa a ser server-side con `service_role`
+- `lock_down_cv_storage.sql` — bucket `CVs Makers` privado + quita las policies públicas (incluida DELETE)
+- `audit_magic_link_tokens.sql` — diagnóstico (solo lectura) de la entropía de los tokens
 - `add_user_type_columns.sql` — columnas de flujo condicional seeker/founder/employed
 - `add_not_looking_enum.sql` — agrega el valor `not_looking` al enum `search_status`
 - `create_whatsapp_campaigns.sql` — tablas de campañas de WhatsApp + columna `last_reminder_sent_at` en `placements_makers`
+- `add_whatsapp_delivery_status.sql` — estados `delivered`/`read`, contadores por campaña y la función `increment_campaign_counter` (correr después de `create_whatsapp_campaigns.sql`)
 
 ## Desarrollo local
 
@@ -79,9 +85,13 @@ NEXT_PUBLIC_SITE_URL=       # usado como emailRedirectTo en el registro y en los
 KAPSO_API_KEY=
 KAPSO_PHONE_NUMBER_ID=      # phone_number_id de Meta (número conectado en Kapso)
 KAPSO_BUSINESS_ACCOUNT_ID=  # WABA id, necesario para listar templates
+KAPSO_WEBHOOK_SECRET=       # secreto del webhook de Kapso, para validar la firma HMAC
+
+SUPABASE_SERVICE_ROLE_KEY=  # server-only; obligatorio: todo acceso a placements_makers y al bucket de CVs pasa por él
 ```
 
 ## Notas
 
 - `next.config.mjs` tiene `typescript.ignoreBuildErrors: true` e `images.unoptimized: true`.
-- El acceso de lectura/escritura a `placements_makers` vía RLS es público (`USING (true)`) — la seguridad del perfil depende de que el `magic_link_token` sea difícil de adivinar, no de autenticación real.
+- `placements_makers` y el bucket `CVs Makers` están cerrados a los roles `anon`/`authenticated`: ninguna consulta sale del navegador, todo pasa por el servidor con `service_role` y cada caller autoriza antes (sesión + rol en el dashboard, `magic_link_token` en `/perfil`). Los CVs se sirven con signed URLs.
+- La seguridad del perfil del maker sigue dependiendo de que el `magic_link_token` sea difícil de adivinar, no de autenticación real — pero los tokens ya no son legibles desde fuera. Correr `scripts/audit_magic_link_tokens.sql` para verificar su entropía.
