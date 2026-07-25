@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
 import { revalidatePath } from 'next/cache'
 import { getKapsoClient, listApprovedTemplates, type KapsoTemplate } from '@/lib/kapso/client'
 
@@ -37,10 +38,21 @@ export async function getApprovedTemplates(): Promise<
   }
 }
 
-const MAX_RECIPIENTS = 250
+const MAX_RECIPIENTS = 1000
 const SEND_DELAY_MS = 150
+/**
+ * Destinatarios por invocación del server action. El envío es secuencial, así que
+ * cada lote debe caber holgadamente en el timeout de la plataforma (60s en Vercel
+ * Hobby): ~25 mensajes × (150ms de delay + latencia de Meta) ≈ 15-20s.
+ * El cliente llama a `sendCampaignBatch` en bucle hasta que no queden pendientes.
+ */
+const BATCH_SIZE = 25
 
-export async function sendCampaign({
+/**
+ * Crea la campaña y una fila `pending` por destinatario. No envía nada:
+ * el envío ocurre lote a lote en `sendCampaignBatch`.
+ */
+export async function createCampaign({
   name,
   templateName,
   templateLanguage,
@@ -56,12 +68,14 @@ export async function sendCampaign({
 
   if (!makerIds.length) return { error: 'No hay destinatarios seleccionados' }
   if (makerIds.length > MAX_RECIPIENTS) {
-    return { error: `Máximo ${MAX_RECIPIENTS} destinatarios por campaña. Divide el envío en lotes más pequeños.` }
+    return { error: `Máximo ${MAX_RECIPIENTS} destinatarios por campaña. Divide el envío en varias campañas.` }
   }
 
-  const { data: makers, error: makersError } = await supabase
+  // `placements_makers` está cerrada a anon/authenticated: va por service_role,
+  // después de haber verificado admin en requireAdmin().
+  const { data: makers, error: makersError } = await createServiceClient()
     .from('placements_makers')
-    .select('id, first_name, phone_e164, magic_link_token')
+    .select('id, phone_e164')
     .in('id', makerIds)
     .not('phone_e164', 'is', null)
 
@@ -93,7 +107,7 @@ export async function sendCampaign({
     return { error: campaignError?.message || 'No se pudo crear la campaña' }
   }
 
-  const { data: messageRows, error: messagesInsertError } = await supabase
+  const { error: messagesInsertError } = await supabase
     .from('whatsapp_campaign_messages')
     .insert(
       makers.map((m) => ({
@@ -103,12 +117,69 @@ export async function sendCampaign({
         status: 'pending',
       })),
     )
-    .select()
 
-  if (messagesInsertError || !messageRows) {
+  if (messagesInsertError) {
     await supabase.from('whatsapp_campaigns').update({ status: 'failed' }).eq('id', campaign.id)
-    return { error: messagesInsertError?.message || 'No se pudieron registrar los mensajes' }
+    return { error: messagesInsertError.message }
   }
+
+  return { campaignId: campaign.id as string, total: makers.length, batchSize: BATCH_SIZE }
+}
+
+/**
+ * Envía hasta BATCH_SIZE mensajes pendientes de una campaña. Idempotente respecto
+ * de los ya enviados: siempre toma las filas que siguen en `pending`, así que si una
+ * invocación se corta, la siguiente retoma donde quedó. Cuando no quedan pendientes
+ * cierra la campaña con los contadores reales.
+ */
+export async function sendCampaignBatch({ campaignId }: { campaignId: string }) {
+  const { error, supabase } = await requireAdmin()
+  if (error || !supabase) return { error: error || 'No autorizado' }
+
+  const { data: campaign, error: campaignError } = await supabase
+    .from('whatsapp_campaigns')
+    .select('id, template_name, template_language, status')
+    .eq('id', campaignId)
+    .single()
+
+  if (campaignError || !campaign) return { error: 'Campaña no encontrada' }
+
+  const { data: pending, error: pendingError } = await supabase
+    .from('whatsapp_campaign_messages')
+    .select('id, maker_id, phone_e164')
+    .eq('campaign_id', campaignId)
+    .eq('status', 'pending')
+    .order('id', { ascending: true })
+    .limit(BATCH_SIZE)
+
+  if (pendingError) return { error: pendingError.message }
+
+  if (!pending || pending.length === 0) {
+    const summary = await finalizeCampaign(supabase, campaignId)
+    revalidatePath('/campaigns')
+    return { ...summary, sent: 0, failed: 0, remaining: 0, done: true }
+  }
+
+  const approvedTemplates = await listApprovedTemplates()
+  const template = approvedTemplates.find(
+    (t) => t.name === campaign.template_name && t.language === campaign.template_language,
+  )
+  if (!template) {
+    return { error: 'El template seleccionado ya no está disponible o aprobado en Kapso' }
+  }
+
+  // Datos frescos del maker: nunca se confía en lo que manda el cliente.
+  // Vía service_role, igual que en createCampaign.
+  const service = createServiceClient()
+  const { data: makers, error: makersError } = await service
+    .from('placements_makers')
+    .select('id, first_name, phone_e164, magic_link_token')
+    .in(
+      'id',
+      pending.map((p) => p.maker_id),
+    )
+
+  if (makersError) return { error: makersError.message }
 
   const client = getKapsoClient()
   const phoneNumberId = process.env.KAPSO_PHONE_NUMBER_ID!
@@ -116,8 +187,18 @@ export async function sendCampaign({
   let sent = 0
   let failed = 0
 
-  for (const maker of makers) {
-    const messageRow = messageRows.find((r) => r.maker_id === maker.id)
+  for (const messageRow of pending) {
+    const maker = makers?.find((m) => m.id === messageRow.maker_id)
+
+    if (!maker || !maker.phone_e164) {
+      await supabase
+        .from('whatsapp_campaign_messages')
+        .update({ status: 'failed', error: 'Maker sin teléfono o inexistente' })
+        .eq('id', messageRow.id)
+      failed += 1
+      continue
+    }
+
     const firstName = maker.first_name || 'maker'
 
     const bodyParameters =
@@ -150,8 +231,8 @@ export async function sendCampaign({
         phoneNumberId,
         to: maker.phone_e164,
         template: {
-          name: templateName,
-          language: { code: templateLanguage },
+          name: campaign.template_name,
+          language: { code: campaign.template_language },
           components,
         },
       })
@@ -161,9 +242,9 @@ export async function sendCampaign({
       await supabase
         .from('whatsapp_campaign_messages')
         .update({ status: 'sent', wa_message_id: waMessageId, sent_at: new Date().toISOString() })
-        .eq('id', messageRow?.id)
+        .eq('id', messageRow.id)
 
-      await supabase
+      await service
         .from('placements_makers')
         .update({ last_reminder_sent_at: new Date().toISOString() })
         .eq('id', maker.id)
@@ -173,7 +254,7 @@ export async function sendCampaign({
       await supabase
         .from('whatsapp_campaign_messages')
         .update({ status: 'failed', error: err?.message || 'Error desconocido' })
-        .eq('id', messageRow?.id)
+        .eq('id', messageRow.id)
 
       failed += 1
     }
@@ -181,17 +262,43 @@ export async function sendCampaign({
     await new Promise((resolve) => setTimeout(resolve, SEND_DELAY_MS))
   }
 
+  const { count: remaining } = await supabase
+    .from('whatsapp_campaign_messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('campaign_id', campaignId)
+    .eq('status', 'pending')
+
+  const done = (remaining ?? 0) === 0
+  const summary = done ? await finalizeCampaign(supabase, campaignId) : {}
+
+  revalidatePath('/campaigns')
+
+  return { ...summary, sent, failed, remaining: remaining ?? 0, done }
+}
+
+/** Cierra la campaña recontando los estados reales de sus mensajes. */
+async function finalizeCampaign(supabase: any, campaignId: string) {
+  const { count: sentTotal } = await supabase
+    .from('whatsapp_campaign_messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('campaign_id', campaignId)
+    .eq('status', 'sent')
+
+  const { count: failedTotal } = await supabase
+    .from('whatsapp_campaign_messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('campaign_id', campaignId)
+    .eq('status', 'failed')
+
   await supabase
     .from('whatsapp_campaigns')
     .update({
       status: 'completed',
-      sent_count: sent,
-      failed_count: failed,
+      sent_count: sentTotal ?? 0,
+      failed_count: failedTotal ?? 0,
       completed_at: new Date().toISOString(),
     })
-    .eq('id', campaign.id)
+    .eq('id', campaignId)
 
-  revalidatePath('/campaigns')
-
-  return { success: true, sent, failed, total: makers.length }
+  return { sentTotal: sentTotal ?? 0, failedTotal: failedTotal ?? 0 }
 }

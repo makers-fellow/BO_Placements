@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -30,9 +31,18 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { useToast } from '@/hooks/use-toast'
-import { getApprovedTemplates, sendCampaign } from './actions'
+import { getApprovedTemplates, createCampaign, sendCampaignBatch } from './actions'
 import type { KapsoTemplate } from '@/lib/kapso/client'
-import { Send, AlertTriangle, MessageCircle, Clock, CheckCircle2, XCircle } from 'lucide-react'
+import {
+  Send,
+  AlertTriangle,
+  MessageCircle,
+  Clock,
+  CheckCircle2,
+  CheckCheck,
+  Eye,
+  XCircle,
+} from 'lucide-react'
 
 interface Maker {
   id: string
@@ -57,6 +67,8 @@ interface Campaign {
   recipient_count: number
   sent_count: number
   failed_count: number
+  delivered_count?: number | null
+  read_count?: number | null
   created_at: string
   completed_at: string | null
 }
@@ -89,6 +101,7 @@ export default function CampaignsClientPage({
   campaigns: Campaign[]
 }) {
   const { toast } = useToast()
+  const router = useRouter()
   const [threshold, setThreshold] = useState<(typeof THRESHOLD_OPTIONS)[number]>(30)
   const [includeInactive, setIncludeInactive] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -96,6 +109,7 @@ export default function CampaignsClientPage({
   const [templatesError, setTemplatesError] = useState<string | null>(null)
   const [selectedTemplateName, setSelectedTemplateName] = useState<string>('')
   const [sending, setSending] = useState(false)
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
 
   useEffect(() => {
@@ -147,24 +161,70 @@ export default function CampaignsClientPage({
     setSending(true)
     setConfirmOpen(false)
 
-    const result = await sendCampaign({
+    const created = (await createCampaign({
       name: `Recordatorio ${new Date().toLocaleDateString('es-ES')}`,
       templateName: selectedTemplate.name,
       templateLanguage: selectedTemplate.language,
       makerIds: Array.from(selectedIds),
-    })
+    })) as { error?: string; campaignId?: string; total?: number }
 
-    setSending(false)
-
-    if (result.error) {
-      toast({ variant: 'destructive', title: 'Error al enviar campaña', description: result.error })
+    if (created.error || !created.campaignId) {
+      setSending(false)
+      toast({
+        variant: 'destructive',
+        title: 'Error al crear la campaña',
+        description: created.error || 'No se pudo crear la campaña',
+      })
       return
     }
 
+    const campaignId = created.campaignId
+    const total = created.total ?? selectedIds.size
+    setProgress({ done: 0, total })
+
+    // El envío va por lotes: cada llamada manda unos pocos mensajes y devuelve
+    // cuántos quedan, así ninguna request se acerca al timeout de la plataforma.
+    let sent = 0
+    let failed = 0
+
+    while (true) {
+      const batch = (await sendCampaignBatch({ campaignId })) as {
+        error?: string
+        sent?: number
+        failed?: number
+        remaining?: number
+        done?: boolean
+      }
+
+      if (batch.error) {
+        setSending(false)
+        setProgress(null)
+        toast({
+          variant: 'destructive',
+          title: 'Envío interrumpido',
+          description: `${batch.error}. Los mensajes ya enviados se conservan; vuelve a intentarlo para reanudar.`,
+        })
+        router.refresh()
+        return
+      }
+
+      sent += batch.sent ?? 0
+      failed += batch.failed ?? 0
+      setProgress({ done: total - (batch.remaining ?? 0), total })
+
+      if (batch.done) break
+    }
+
+    setSending(false)
+    setProgress(null)
+
     toast({
       title: 'Campaña enviada',
-      description: `${result.sent} enviados, ${result.failed} fallidos de ${result.total} makers`,
+      description: `${sent} enviados, ${failed} fallidos de ${total} makers`,
     })
+
+    // Refresca el historial y los `last_reminder_sent_at` recién actualizados.
+    router.refresh()
   }
 
   return (
@@ -338,7 +398,11 @@ export default function CampaignsClientPage({
             className="bg-[#86EFAC] text-[#0F1729] hover:bg-[#86EFAC]/90"
           >
             <Send className="size-4 mr-2" />
-            {sending ? 'Enviando…' : `Enviar a ${selectedIds.size} maker${selectedIds.size !== 1 ? 's' : ''}`}
+            {sending
+              ? progress
+                ? `Enviando… ${progress.done}/${progress.total}`
+                : 'Enviando…'
+              : `Enviar a ${selectedIds.size} maker${selectedIds.size !== 1 ? 's' : ''}`}
           </Button>
         </CardContent>
       </Card>
@@ -365,10 +429,16 @@ export default function CampaignsClientPage({
                   </div>
                   <div className="flex items-center gap-3 text-xs">
                     <CampaignStatusBadge status={c.status} />
-                    <span className="flex items-center gap-1 text-[#86EFAC]">
+                    <span className="flex items-center gap-1 text-[#86EFAC]" title="Enviados">
                       <CheckCircle2 className="size-3" /> {c.sent_count}
                     </span>
-                    <span className="flex items-center gap-1 text-[#FCA5A5]">
+                    <span className="flex items-center gap-1 text-[#93C5FD]" title="Entregados">
+                      <CheckCheck className="size-3" /> {c.delivered_count ?? 0}
+                    </span>
+                    <span className="flex items-center gap-1 text-[#C4B5FD]" title="Leídos">
+                      <Eye className="size-3" /> {c.read_count ?? 0}
+                    </span>
+                    <span className="flex items-center gap-1 text-[#FCA5A5]" title="Fallidos">
                       <XCircle className="size-3" /> {c.failed_count}
                     </span>
                     <span className="text-[#94a3b8]">

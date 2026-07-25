@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
 import { redirect } from 'next/navigation'
 import CampaignsClientPage from './client-page'
 import { Navbar } from '@/components/navbar'
@@ -25,13 +26,35 @@ export default async function CampaignsPage() {
     redirect('/')
   }
 
-  const { data: makers, error: makersError } = await supabase
-    .from('placements_makers')
-    .select(
-      'id, first_name, full_name, email, phone_e164, search_status, user_type, cohort, profile_last_updated_at, updated_at, last_reminder_sent_at, magic_link_token',
-    )
-    .not('phone_e164', 'is', null)
-    .order('updated_at', { ascending: true })
+  // service_role: `placements_makers` está cerrada a anon/authenticated y el
+  // acceso ya quedó autorizado arriba (sesión + rol admin aprobado).
+  const serviceClient = createServiceClient()
+
+  // PostgREST corta en 1000 filas por request (db-max-rows), así que paginamos:
+  // el filtrado por antigüedad es client-side y necesita la lista completa.
+  const PAGE_SIZE = 1000
+  const MAX_PAGES = 10
+  const makers: any[] = []
+  let makersError: { message: string } | null = null
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const { data, error } = await serviceClient
+      .from('placements_makers')
+      .select(
+        'id, first_name, full_name, email, phone_e164, search_status, user_type, cohort, profile_last_updated_at, updated_at, last_reminder_sent_at, magic_link_token',
+      )
+      .not('phone_e164', 'is', null)
+      .order('updated_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+
+    if (error) {
+      makersError = error
+      break
+    }
+    makers.push(...(data || []))
+    if (!data || data.length < PAGE_SIZE) break
+  }
 
   const { data: campaigns } = await supabase
     .from('whatsapp_campaigns')
@@ -50,7 +73,7 @@ export default async function CampaignsPage() {
           </p>
         </div>
         <CampaignsClientPage
-          makers={makers || []}
+          makers={makers}
           fetchError={makersError?.message || null}
           campaigns={campaigns || []}
         />
