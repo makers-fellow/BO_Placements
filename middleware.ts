@@ -37,7 +37,9 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/login') ||
     pathname.startsWith('/register') ||
     pathname.startsWith('/perfil/') ||
-    pathname.startsWith('/auth/')
+    pathname.startsWith('/auth/') ||
+    // Kapso llama este endpoint sin sesión; se autentica con firma HMAC.
+    pathname.startsWith('/api/whatsapp/webhook')
 
   if (isPublicRoute) {
     return supabaseResponse
