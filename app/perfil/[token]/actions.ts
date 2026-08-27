@@ -23,6 +23,7 @@ export interface ProfileData {
   github_url: string
   cv_url: string | null
   strengths: string
+  fellowship_graduated: boolean | null
   // Founder fields
   startup_name: string
   startup_stage: string
@@ -117,6 +118,7 @@ export async function updateProfile(
       github_url: data.github_url,
       cv_url: data.cv_url,
       strengths: data.strengths,
+      fellowship_graduated: data.fellowship_graduated,
       // Clear other flow fields
       startup_name: null,
       startup_stage: null,

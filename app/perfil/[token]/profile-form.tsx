@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useMemo, useRef, useState, useTransition } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -18,6 +18,7 @@ import { PillSelect, GroupedPillSelect } from "@/components/ui/pill-select"
 import { AlertCircle, Upload, X, FileText, Loader2 } from "lucide-react"
 import { updateProfile, uploadCV, deleteCV, type ProfileData } from "./actions"
 import { ConfirmationView } from "./confirmation-view"
+import { ProfileProgressBar } from "@/components/profile-progress-bar"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 
@@ -125,6 +126,10 @@ const STARTUP_STAGE_OPTIONS = [
   { value: "series_b_plus", label: "Serie B+" },
 ]
 
+function hasText(value: string) {
+  return value.trim().length > 0
+}
+
 function ErrorMessage({ message }: { message: string }) {
   return (
     <div className="flex items-center gap-2 text-[#FCA5A5] text-sm mt-2">
@@ -139,6 +144,7 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
   const [isUploading, setIsUploading] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const searchStatusRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
 
   // Form state
@@ -173,6 +179,70 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
   const [founderRole, setFounderRole] = useState((initialData as any).founder_role || "")
   const [employerName, setEmployerName] = useState((initialData as any).employer_name || "")
   const [employerRole, setEmployerRole] = useState((initialData as any).employer_role || "")
+  const [fellowshipGraduated, setFellowshipGraduated] = useState<boolean | null>(
+    initialData.fellowship_graduated ?? null
+  )
+
+  const progressPercent = useMemo(() => {
+    const steps: boolean[] = [searchStatus !== ""]
+
+    if (searchStatus === "not_looking") {
+      const pickedSituation = flowType === "founder" || flowType === "employed"
+      steps.push(pickedSituation)
+
+      if (flowType === "founder") {
+        steps.push(
+          hasText(startupName) && hasText(startupStage) && startupIndustry.length > 0
+        )
+        steps.push(hasText(founderRole))
+      } else if (flowType === "employed") {
+        steps.push(hasText(employerName) && hasText(employerRole))
+      }
+    } else if (searchStatus === "actively_seeking" || searchStatus === "open_to_offers") {
+      steps.push(hasText(currentRole) && hasText(seniority))
+      steps.push(roles.length > 0)
+      steps.push(industries.length > 0)
+      steps.push(toolsSkills.length > 0)
+      steps.push(hasText(locationCity))
+      steps.push(companyType.length > 0)
+      steps.push(hasText(salaryMin) && hasText(salaryMax))
+      steps.push(
+        hasText(linkedinUrl) &&
+          hasText(portfolioUrl) &&
+          hasText(githubUrl) &&
+          Boolean(cvUrl)
+      )
+      steps.push(hasText(strengths))
+      steps.push(fellowshipGraduated === true || fellowshipGraduated === false)
+    }
+
+    const filled = steps.filter(Boolean).length
+    return Math.round((filled / steps.length) * 100)
+  }, [
+    searchStatus,
+    flowType,
+    startupName,
+    startupStage,
+    startupIndustry,
+    founderRole,
+    employerName,
+    employerRole,
+    currentRole,
+    seniority,
+    roles,
+    industries,
+    toolsSkills,
+    locationCity,
+    companyType,
+    salaryMin,
+    salaryMax,
+    linkedinUrl,
+    portfolioUrl,
+    githubUrl,
+    cvUrl,
+    strengths,
+    fellowshipGraduated,
+  ])
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {}
@@ -267,38 +337,46 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
     }
   }
 
+  const buildProfileData = (): ProfileData => ({
+    search_status: searchStatus as ProfileData["search_status"],
+    user_type: flowType,
+    current_position: currentRole,
+    seniority: seniority as ProfileData["seniority"],
+    roles,
+    industries,
+    tools: toolsSkills,
+    city: locationCity,
+    full_time: fullTime,
+    company_type: companyType,
+    salary_min: salaryMin ? Number(salaryMin) : null,
+    salary_max: salaryMax ? Number(salaryMax) : null,
+    salary_currency: salaryCurrency,
+    linkedin_url: linkedinUrl,
+    portfolio_url: portfolioUrl,
+    github_url: githubUrl,
+    cv_url: cvUrl || null,
+    strengths,
+    fellowship_graduated: fellowshipGraduated,
+    startup_name: startupName,
+    startup_stage: startupStage,
+    startup_industry: startupIndustry,
+    founder_role: founderRole,
+    employer_name: employerName,
+    employer_role: employerRole,
+  })
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!validateForm()) return
+    if (!validateForm()) {
+      if (!searchStatus) {
+        searchStatusRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+      }
+      return
+    }
 
     startTransition(async () => {
-      const data: ProfileData = {
-        search_status: searchStatus as ProfileData["search_status"],
-        user_type: flowType,
-        current_position: currentRole,
-        seniority: seniority as ProfileData["seniority"],
-        roles,
-        industries,
-        tools: toolsSkills,
-        city: locationCity,
-        full_time: fullTime,
-        company_type: companyType,
-        salary_min: salaryMin ? Number(salaryMin) : null,
-        salary_max: salaryMax ? Number(salaryMax) : null,
-        salary_currency: salaryCurrency,
-        linkedin_url: linkedinUrl,
-        portfolio_url: portfolioUrl,
-        github_url: githubUrl,
-        cv_url: cvUrl || null,
-        strengths,
-        startup_name: startupName,
-        startup_stage: startupStage,
-        startup_industry: startupIndustry,
-        founder_role: founderRole,
-        employer_name: employerName,
-        employer_role: employerRole,
-      }
+      const data: ProfileData = buildProfileData()
 
       const result = await updateProfile(token, data)
 
@@ -319,32 +397,7 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
       <ConfirmationView
         name={initialData.name || "Maker"}
         cvHref={`/perfil/${token}/cv`}
-        data={{
-          search_status: searchStatus as ProfileData["search_status"],
-          user_type: flowType,
-          current_position: currentRole,
-          seniority: seniority as ProfileData["seniority"],
-          roles,
-          industries,
-          tools: toolsSkills,
-          city: locationCity,
-          full_time: fullTime,
-          company_type: companyType,
-          salary_min: salaryMin ? Number(salaryMin) : null,
-          salary_max: salaryMax ? Number(salaryMax) : null,
-          salary_currency: salaryCurrency,
-          linkedin_url: linkedinUrl,
-          portfolio_url: portfolioUrl,
-          github_url: githubUrl,
-          cv_url: cvUrl || null,
-          strengths,
-          startup_name: startupName,
-          startup_stage: startupStage,
-          startup_industry: startupIndustry,
-          founder_role: founderRole,
-          employer_name: employerName,
-          employer_role: employerRole,
-        }}
+        data={buildProfileData()}
         onEdit={() => setSubmitted(false)}
       />
     )
@@ -369,11 +422,16 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
         </p>
       </div>
 
+      <div className="sticky top-0 z-50 -mx-1 !mt-0 pt-3 pb-3 bg-[#0F1729]">
+        <ProfileProgressBar percent={progressPercent} />
+      </div>
+
       {/* Section 1: Search Status */}
+      <div ref={searchStatusRef}>
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl font-extrabold">Estado de búsqueda</CardTitle>
-          <CardDescription>¿Cómo estás en tu búsqueda de empleo?</CardDescription>
+          <CardTitle className="text-xl font-extrabold">Estado de búsqueda *</CardTitle>
+          <CardDescription>Obligatorio. ¿Cómo estás en tu búsqueda de empleo?</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -429,6 +487,7 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
           {errors.search_status && <ErrorMessage message={errors.search_status} />}
         </CardContent>
       </Card>
+      </div>
 
       {/* Sub-question: Founder or Employed? */}
       {searchStatus === "not_looking" && (
@@ -915,10 +974,56 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
           </div>
         </CardContent>
       </Card>
+
+      {/* Section 11: Fellowship graduation (optional, seeker-only) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-xl font-extrabold">¿Ya eres un Maker graduado?</CardTitle>
+          <CardDescription>
+            Opcional. ¿Completaste todo el curso de Makers Fellowship?
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setFellowshipGraduated((prev) => (prev === true ? null : true))}
+              className={cn(
+                "flex flex-col items-start p-4 rounded-xl border-2 transition-all min-h-[88px]",
+                "focus:outline-none focus:ring-2 focus:ring-[#86EFAC] focus:ring-offset-2 focus:ring-offset-[#0F1729]",
+                fellowshipGraduated === true
+                  ? "border-[#86EFAC] bg-[#86EFAC]/10"
+                  : "border-[#1e3a5f] hover:border-[#86EFAC]/50"
+              )}
+            >
+              <span className="font-semibold text-white">Sí, ya me gradué</span>
+              <span className="text-sm text-[#C7D2FE] mt-1">
+                Completé todo el curso de Makers Fellowship
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFellowshipGraduated((prev) => (prev === false ? null : false))}
+              className={cn(
+                "flex flex-col items-start p-4 rounded-xl border-2 transition-all min-h-[88px]",
+                "focus:outline-none focus:ring-2 focus:ring-[#86EFAC] focus:ring-offset-2 focus:ring-offset-[#0F1729]",
+                fellowshipGraduated === false
+                  ? "border-[#86EFAC] bg-[#86EFAC]/10"
+                  : "border-[#1e3a5f] hover:border-[#86EFAC]/50"
+              )}
+            >
+              <span className="font-semibold text-white">Aún no</span>
+              <span className="text-sm text-[#C7D2FE] mt-1">
+                Todavía no completé el fellowship
+              </span>
+            </button>
+          </div>
+        </CardContent>
+      </Card>
       </>)}
 
       {/* Submit Button - Sticky on mobile */}
-      <div className="sticky bottom-0 bg-[#0F1729] py-4 -mx-4 px-4 sm:static sm:bg-transparent sm:py-0 sm:mx-0 sm:px-0">
+      <div className="sticky bottom-0 z-20 bg-[#0F1729] py-4 -mx-4 px-4 sm:static sm:bg-transparent sm:py-0 sm:mx-0 sm:px-0">
         <Button
           type="submit"
           disabled={isPending}
