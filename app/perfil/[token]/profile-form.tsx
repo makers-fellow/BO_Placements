@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select"
 import { PillSelect, GroupedPillSelect } from "@/components/ui/pill-select"
 import { AlertCircle, Upload, X, FileText, Loader2 } from "lucide-react"
-import { updateProfile, uploadCV, deleteCV, type ProfileData } from "./actions"
+import { updateProfile, updateSeekerSection, uploadCV, deleteCV, type ProfileData, type SeekerSection } from "./actions"
 import { ConfirmationView } from "./confirmation-view"
 import { ProfileProgressBar } from "@/components/profile-progress-bar"
 import { cn } from "@/lib/utils"
@@ -182,6 +182,17 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
   const [fellowshipGraduated, setFellowshipGraduated] = useState<boolean | null>(
     initialData.fellowship_graduated ?? null
   )
+  const [seekerStep, setSeekerStep] = useState<0 | 1 | 2 | 3>(
+    initialData.search_status === "actively_seeking" || initialData.search_status === "open_to_offers"
+      ? 1
+      : 0
+  )
+
+  const isSeekerFlow = searchStatus === "actively_seeking" || searchStatus === "open_to_offers"
+  const showSearchStatusCard = seekerStep <= 1
+  const showSeekerSection1 = isSeekerFlow && seekerStep === 1
+  const showSeekerSection2 = isSeekerFlow && seekerStep === 2
+  const showSeekerSection3 = isSeekerFlow && seekerStep === 3
 
   const progressPercent = useMemo(() => {
     const steps: boolean[] = [searchStatus !== ""]
@@ -281,6 +292,28 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
     return Object.keys(newErrors).length === 0
   }
 
+  const validateSeekerSection = (section: SeekerSection): boolean => {
+    const newErrors: Record<string, string> = {}
+
+    if (section === 2) {
+      if (salaryMin && salaryMax && Number(salaryMax) < Number(salaryMin)) {
+        newErrors.salary = "El máximo debe ser mayor al mínimo"
+      }
+    }
+
+    if (section === 3) {
+      if (linkedinUrl && !linkedinUrl.includes("linkedin.com")) {
+        newErrors.linkedin = "Ingresa una URL de LinkedIn válida"
+      }
+      if (strengths.length > 500) {
+        newErrors.strengths = "Máximo 500 caracteres"
+      }
+    }
+
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -368,6 +401,10 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    if (isSeekerFlow) {
+      return
+    }
+
     if (!validateForm()) {
       if (!searchStatus) {
         searchStatusRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
@@ -390,6 +427,44 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
         })
       }
     })
+  }
+
+  const handleSeekerBack = () => {
+    setErrors({})
+    setSeekerStep((prev) => (prev > 0 ? ((prev - 1) as 0 | 1 | 2 | 3) : prev))
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
+  const handleSeekerNext = (section: SeekerSection) => {
+    if (!isSeekerFlow) return
+    if (!validateSeekerSection(section)) return
+
+    startTransition(async () => {
+      const result = await updateSeekerSection(token, section, buildProfileData())
+
+      if (!result.success) {
+        toast({
+          variant: "destructive",
+          title: "Error al guardar perfil",
+          description: result.error || "Error al guardar. Intenta de nuevo.",
+        })
+        return
+      }
+
+      if (section === 3) {
+        setSubmitted(true)
+        return
+      }
+
+      setSeekerStep((section + 1) as 1 | 2 | 3)
+      window.scrollTo({ top: 0, behavior: "smooth" })
+    })
+  }
+
+  const selectSeeking = (status: "actively_seeking" | "open_to_offers") => {
+    setSearchStatus(status)
+    setFlowType("seeker")
+    setSeekerStep(1)
   }
 
   if (submitted) {
@@ -423,10 +498,14 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
       </div>
 
       <div className="sticky top-0 z-50 -mx-1 !mt-0 pt-3 pb-3 bg-[#0F1729]">
-        <ProfileProgressBar percent={progressPercent} />
+        <ProfileProgressBar
+          percent={progressPercent}
+          step={isSeekerFlow && seekerStep >= 1 ? seekerStep : undefined}
+          stepCount={isSeekerFlow && seekerStep >= 1 ? 3 : undefined}
+        />
       </div>
 
-      {/* Section 1: Search Status */}
+      {showSearchStatusCard && (
       <div ref={searchStatusRef}>
       <Card>
         <CardHeader>
@@ -437,7 +516,7 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
           <div className="grid gap-4 sm:grid-cols-2">
             <button
               type="button"
-              onClick={() => { setSearchStatus("actively_seeking"); setFlowType("seeker"); }}
+              onClick={() => selectSeeking("actively_seeking")}
               className={cn(
                 "flex flex-col items-start p-4 rounded-xl border-2 transition-all min-h-[88px]",
                 "focus:outline-none focus:ring-2 focus:ring-[#86EFAC] focus:ring-offset-2 focus:ring-offset-[#0F1729]",
@@ -453,7 +532,7 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
             </button>
             <button
               type="button"
-              onClick={() => { setSearchStatus("open_to_offers"); setFlowType("seeker"); }}
+              onClick={() => selectSeeking("open_to_offers")}
               className={cn(
                 "flex flex-col items-start p-4 rounded-xl border-2 transition-all min-h-[88px]",
                 "focus:outline-none focus:ring-2 focus:ring-[#86EFAC] focus:ring-offset-2 focus:ring-offset-[#0F1729]",
@@ -470,7 +549,10 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
           </div>
           <button
             type="button"
-            onClick={() => setSearchStatus("not_looking")}
+            onClick={() => {
+              setSearchStatus("not_looking")
+              setSeekerStep(0)
+            }}
             className={cn(
               "w-full flex flex-col items-start p-4 rounded-xl border-2 transition-all",
               "focus:outline-none focus:ring-2 focus:ring-[#86EFAC] focus:ring-offset-2 focus:ring-offset-[#0F1729]",
@@ -488,6 +570,7 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
         </CardContent>
       </Card>
       </div>
+      )}
 
       {/* Sub-question: Founder or Employed? */}
       {searchStatus === "not_looking" && (
@@ -648,8 +731,8 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
         </Card>
       )}
 
-      {/* SEEKER FLOW */}
-      {flowType === "seeker" && searchStatus !== "not_looking" && (<>
+      {/* SEEKER SECTION 1: Perfil */}
+      {showSeekerSection1 && (<>
       {/* Section 2: Professional Profile */}
       <Card>
         <CardHeader>
@@ -725,7 +808,10 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
           />
         </CardContent>
       </Card>
+      </>)}
 
+      {/* SEEKER SECTION 2: Preferencias */}
+      {showSeekerSection2 && (<>
       {/* Section 5: Tools & Skills */}
       <Card>
         <CardHeader>
@@ -845,7 +931,10 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
           {errors.salary && <ErrorMessage message={errors.salary} />}
         </CardContent>
       </Card>
+      </>)}
 
+      {/* SEEKER SECTION 3: Presencia */}
+      {showSeekerSection3 && (<>
       {/* Section 9: Links & CV */}
       <Card>
         <CardHeader>
@@ -1022,28 +1111,57 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
       </Card>
       </>)}
 
-      {/* Submit Button - Sticky on mobile */}
+      {/* Submit / wizard buttons - Sticky on mobile */}
       <div className="sticky bottom-0 z-20 bg-[#0F1729] py-4 -mx-4 px-4 sm:static sm:bg-transparent sm:py-0 sm:mx-0 sm:px-0">
-        <Button
-          type="submit"
-          disabled={isPending}
-          className="w-full h-12 text-base font-semibold bg-[#86EFAC] text-[#0F1729] hover:bg-[#86EFAC]/90 focus:ring-2 focus:ring-[#86EFAC] focus:ring-offset-2 focus:ring-offset-[#0F1729]"
-        >
-          {isPending ? (
-            <>
-              <Loader2 className="size-5 animate-spin" />
-              Guardando...
-            </>
-          ) : flowType === "founder" ? (
-            "Guardar como founder"
-          ) : flowType === "employed" ? (
-            "Guardar como empleado"
-          ) : searchStatus === "not_looking" ? (
-            "Confirmar estado"
-          ) : (
-            "Guardar y activar mi perfil"
-          )}
-        </Button>
+        {isSeekerFlow && seekerStep >= 1 ? (
+          <div className="flex gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isPending}
+              onClick={handleSeekerBack}
+              className="h-12 flex-1 text-base font-semibold border-[#1e3a5f] text-white hover:bg-[#86EFAC]/10 hover:border-[#86EFAC]"
+            >
+              Atrás
+            </Button>
+            <Button
+              type="button"
+              disabled={isPending}
+              onClick={() => handleSeekerNext(seekerStep as SeekerSection)}
+              className="h-12 flex-[2] text-base font-semibold bg-[#86EFAC] text-[#0F1729] hover:bg-[#86EFAC]/90 focus:ring-2 focus:ring-[#86EFAC] focus:ring-offset-2 focus:ring-offset-[#0F1729]"
+            >
+              {isPending ? (
+                <>
+                  <Loader2 className="size-5 animate-spin" />
+                  Guardando...
+                </>
+              ) : seekerStep === 3 ? (
+                "Guardar y activar mi perfil"
+              ) : (
+                "Siguiente"
+              )}
+            </Button>
+          </div>
+        ) : searchStatus === "not_looking" ? (
+          <Button
+            type="submit"
+            disabled={isPending}
+            className="w-full h-12 text-base font-semibold bg-[#86EFAC] text-[#0F1729] hover:bg-[#86EFAC]/90 focus:ring-2 focus:ring-[#86EFAC] focus:ring-offset-2 focus:ring-offset-[#0F1729]"
+          >
+            {isPending ? (
+              <>
+                <Loader2 className="size-5 animate-spin" />
+                Guardando...
+              </>
+            ) : flowType === "founder" ? (
+              "Guardar como founder"
+            ) : flowType === "employed" ? (
+              "Guardar como empleado"
+            ) : (
+              "Confirmar estado"
+            )}
+          </Button>
+        ) : null}
       </div>
 
       {/* Footer */}

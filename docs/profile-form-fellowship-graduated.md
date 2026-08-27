@@ -1,146 +1,187 @@
-# Campo `fellowship_graduated` en el formulario de perfil
+# Formulario público de perfil (`/perfil/<magic_link>`)
 
-Este documento describe el cambio del formulario público `/perfil/<magic_link>`: una pregunta opcional de graduación de Makers Fellowship (solo visible para seekers que buscan trabajo), el refuerzo de que el estado de búsqueda es obligatorio, y el SQL que hay que correr **a mano** en Supabase.
+Spec del formulario que abre cada maker con su token. Cubre el wizard de 3 secciones para seekers, el guardado parcial, la regla de no borrar datos de otras secciones, el campo `fellowship_graduated`, y el SQL manual de esa columna.
 
-Nada de este cambio se ejecuta contra la base desde el repo. El código asume que la columna existirá después de que corras el script.
-
----
-
-## 1. Cambios a nivel usuario
-
-### Qué ve el maker
-
-Sigue entrando por su **magic link** personal (`/perfil/<token>`). El link identifica una fila de `placements_makers`. Eso no cambió: funciona para quien busca trabajo, para quien no busca, para founders y para employed.
-
-La primera sección del formulario ahora se llama **“Estado de búsqueda \*”** y la descripción dice que es **obligatorio**. Si guarda sin elegir una de las tres opciones (buscando activamente, abierto a ofertas, no busco trabajo):
-
-- el formulario no se envía
-- aparece el error “Selecciona tu estado de búsqueda”
-- la página hace scroll hasta esa card
-
-Eso aplica a **todos** los flujos, no solo a seekers.
-
-### Pregunta nueva: ¿Ya eres un Maker graduado?
-
-Solo aparece al **final** del cuestionario de seeker, **después de Fortalezas**, cuando la persona eligió:
-
-- “Buscando activamente”, o
-- “Abierto a ofertas”
-
-No la ven quienes eligen “No busco trabajo” (founder o employed). Esos recorridos siguen iguales: mismas cards, mismos campos obligatorios (nombre y rol), mismos botones (“Guardar como founder” / “Guardar como empleado”).
-
-La pregunta es **opcional**. Diseño igual al resto (dos tarjetas con borde, verde `#86EFAC` al seleccionar):
-
-| Acción en el form | Valor que se guarda |
-| --- | --- |
-| No toca la pregunta | `null` |
-| “Sí, ya me gradué” | `true` |
-| “Aún no” | `false` |
-| Clic de nuevo en la opción ya seleccionada | vuelve a `null` (deseleccionar) |
-
-No bloquear el envío si queda sin responder.
-
-### Qué no cambió para el usuario
-
-- Founder y employed siguen completando y guardando su perfil como hoy.
-- Quien ya tenía perfil y reabre el link sigue viendo sus datos anteriores.
-- El dashboard de candidatos, campañas de WhatsApp y la pantalla de resumen post-guardar **no muestran** este campo. El dato sí viaja en el objeto interno del form (TypeScript), pero la UI de confirmación no lo lista.
-- No hay login nuevo: el token del link sigue siendo la credencial.
+El magic link identifica **una fila** de `placements_makers`. No hay login: el `magic_link_token` es la credencial. Founder y employed **no** usan el wizard.
 
 ---
 
-## 2. Cambios en código / repositorio
-
-### Archivos tocados
-
-| Archivo | Rol |
-| --- | --- |
-| `scripts/add_fellowship_graduated.sql` | Migración para correr **tú** en el SQL Editor. El app no la ejecuta. |
-| `app/perfil/[token]/actions.ts` | Tipo `ProfileData` + escritura del campo solo en el payload seeker. |
-| `app/perfil/[token]/page.tsx` | Hidrata `fellowship_graduated` en `initialData` para cualquier magic link. |
-| `app/perfil/[token]/profile-form.tsx` | Estado, UI de la pregunta, scroll si falta estado de búsqueda. |
-| `docs/profile-form-fellowship-graduated.md` | Este documento. |
-
-### Archivos que **no** se tocaron (a propósito)
-
-- `app/page.tsx` y `app/candidates-table.tsx` (dashboard)
-- `app/campaigns/*`
-- `app/perfil/[token]/confirmation-view.tsx` (no se muestra el campo; el form le pasa el objeto completo para que compile)
-- RLS, env vars, `lib/supabase/*`
-
-### Cómo sigue funcionando el magic link para todos
+## 1. Cómo entra el maker
 
 ```
 GET /perfil/<token>
   → page.tsx lee placements_makers WHERE magic_link_token = token (select *)
-  → si existe la fila, monta ProfileForm con initialData de ESA persona
-  → al guardar, updateProfile hace UPDATE ... WHERE magic_link_token = token
+  → si no hay fila: "Enlace no válido"
+  → si hay fila: ProfileForm con initialData de ESA persona (incluye respuestas ya guardadas)
 ```
 
-No hay filtro por `user_type` ni por `search_status` en la lectura ni en el UPDATE. Seeker, founder y employed **siempre** actualizan su fila si el token es válido.
+`select("*")` trae columnas nuevas cuando existen en Postgres. El form **no** usa la fila cruda: solo lo que se copia a `initialData` en `app/perfil/[token]/page.tsx`.
 
-### `page.tsx`: por qué hay que mapear el campo
+Reabrir el link **siempre** hidrata inputs/pills desde la DB. Si la persona no toca un campo, el valor que se reenvía al guardar esa sección es el que ya estaba.
 
-`select("*")` ya trae columnas nuevas de Postgres cuando existen. El formulario **no** usa la fila cruda: solo usa lo que se copia a `initialData`. Si no se pasa `fellowship_graduated`, al recargar el link el `useState` arranca en `null` aunque en la base esté `true`.
+**Dónde arranca el wizard al reabrir:**
+
+| `search_status` en la fila | Pantalla inicial |
+| --- | --- |
+| `actively_seeking` o `open_to_offers` | Sección 1 (pregunta 1 visible + cards de perfil). No se resume en la 2 o 3. |
+| `not_looking` o vacío | Paso 0: solo estado de búsqueda (y, si ya eligió “no busco”, el form corto debajo). |
+
+---
+
+## 2. Paso 0 — Estado de búsqueda (obligatorio, fuera de las 3 secciones)
+
+Card **“Estado de búsqueda *”**. No tiene botón Siguiente. Al elegir una opción el formulario **cambia solo**, igual que antes de este wizard:
+
+| Click | Qué pasa en UI | Qué pasa en DB |
+| --- | --- | --- |
+| Buscando activamente | `user_type = seeker`, aparecen de inmediato las cards de la **sección 1** debajo de esta card | Nada |
+| Abierto a ofertas | Igual | Nada |
+| No busco trabajo | Form corto founder/employed debajo, botón de guardar de siempre | Nada |
+
+No existe un Siguiente propio de esta pregunta. El primer persist de seeker es el **Siguiente de la sección 1**.
+
+En las **secciones 2 y 3** esta card **no** se muestra. Atrás desde la 2 la vuelve a mostrar (junto con la sección 1). Atrás desde la sección 1 deja **solo** esta card (aunque seeking siga seleccionado); hay que volver a elegir seeking para ver la sección 1. Tampoco escribe en DB.
+
+Si en la sección 1 cambian a “No busco trabajo”, `seekerStep` vuelve a 0 y se muestra founder/employed.
+
+---
+
+## 3. Wizard seeker (solo buscando / abierto a ofertas)
+
+Tres páginas. Las **preguntas y el markup de cada card no cambian**; solo se muestran de a una tanda.
+
+Barra de progreso: el **% global es el mismo de antes** (cuenta todos los bloques seeker, no solo los de la página visible). A la **derecha** de la barra, fuera de ella: `Paso X de 3` (`text-xs font-semibold tabular-nums text-[#C7D2FE]`). Ese texto **no** aparece en el paso 0 ni en founder/employed.
+
+### Sección 1 — Perfil
+
+Cards: Perfil profesional (rol actual, seniority) · Roles de interés · Industrias.
+
+Botones: **Atrás** (sin DB) · **Siguiente**.
+
+Siguiente **no exige** que estén llenos. Si el PATCH falla, no avanza (toast).
+
+Columnas que se escriben (allowlist; nada más):
+
+- `search_status`
+- `user_type` = `seeker`
+- `current_position`
+- `seniority`
+- `roles`
+- `industries`
+
+**No** se toca `profile_last_updated_at`. **No** se pisan salario, CV, tools, fellowship, startup, employer, etc.
+
+### Sección 2 — Preferencias
+
+Cards: Tools y skills · Ubicación · Tipo de empresa · Pretensión salarial.
+
+Botones: **Atrás** (sin DB) · **Siguiente**.
+
+Única validación extra (igual que antes, solo si llenó ambos): salario máximo ≥ mínimo.
+
+Columnas:
+
+- `tools`
+- `city`
+- `full_time`
+- `company_type`
+- `salary_min`
+- `salary_max`
+- `salary_currency`
+
+**No** `profile_last_updated_at`. **No** pisa sección 1 ni 3.
+
+### Sección 3 — Presencia
+
+Cards: Links y CV · Fortalezas · ¿Ya eres un Maker graduado?
+
+Botones: **Atrás** (sin DB) · **Guardar y activar mi perfil**.
+
+Validaciones si hay valor: LinkedIn debe contener `linkedin.com`; fortalezas ≤ 500. Fellowship **opcional**.
+
+Columnas:
+
+- `linkedin_url`
+- `portfolio_url`
+- `github_url`
+- `cv_url`
+- `strengths`
+- `fellowship_graduated`
+- **`profile_last_updated_at`** (ahora sí: es el “terminé” que usan las campañas de WhatsApp)
+- Limpia founder/employed: `startup_name`, `startup_stage`, `startup_industry`, `founder_role`, `employer_name`, `employer_role` → `null` (mismo cierre que el `updateProfile` seeker de una sola página)
+
+Si el save falla, **no** va a `ConfirmationView`.
+
+CV: `uploadCV` / `deleteCV` siguen igual (storage al instante). `cv_url` en la **fila** se persiste al guardar esta sección.
+
+---
+
+## 4. Qué no se borra
+
+- Cada PATCH manda **solo** las columnas de esa sección.
+- Campos de otras secciones quedan como están en Postgres.
+- El form carga `initialData`. Si no tocan un campo de la sección actual, se reenvía el valor hidratado (no se “vacía” la DB).
+- Vaciar a mano un input, desmarcar pills o deseleccionar fellowship **en esa sección** y dar Siguiente/Guardar sí escribe `""` / `[]` / `null`. El form lo permite; es un borrado explícito del usuario.
+- Founder/employed no se limpian en Siguiente de 1 o 2. Solo en el guardado final de la sección 3 (completar como seeker), igual que el submit único de antes.
+
+`profile_last_updated_at`: **solo** al terminar la sección 3 (seeker) o al submit de founder/employed. Abandonar en 1 o 2 deja respuestas guardadas pero **no** saca al maker de recordatorios de WhatsApp.
+
+---
+
+## 5. Founder y employed (sin wizard)
+
+Siguen en **una sola página** debajo de “No busco trabajo”. Un solo `updateProfile` al final, con timestamp.
+
+- Founder: nombre * y rol * obligatorios; etapa e industria opcionales. Limpia employer.
+- Employed: empresa * y rol *. Limpia founder.
+- No ven el wizard, ni `Paso X de 3`, ni la pregunta de graduación.
+- No mandan `fellowship_graduated`: si alguna vez fue seeker, el valor previo **no se pisa**.
+
+---
+
+## 6. Campo `fellowship_graduated`
+
+Solo UI de sección 3 seeker, después de Fortalezas.
+
+| Acción | Valor |
+| --- | --- |
+| No toca la pregunta | `null` |
+| “Sí, ya me gradué” | `true` |
+| “Aún no” | `false` |
+| Clic de nuevo en la opción ya seleccionada | `null` |
+
+No bloquea “Guardar y activar”. Dashboard, campañas y `confirmation-view.tsx` **no lo listan** (el objeto TypeScript sí lo lleva).
+
+Hidratación:
 
 ```ts
 fellowship_graduated: maker.fellowship_graduated ?? null
 ```
 
-Se usa `?? null` (no `?? false`) para no convertir “no respondió” / columna ausente en “no se graduó”. Founder y employed también reciben el valor, pero no ven la pregunta; no cambia su UI.
-
-Hasta que corras el SQL, `maker.fellowship_graduated` será `undefined` y el form tratará `null`. La lectura no rompe. **El guardado de un seeker sí fallará** si el payload incluye una columna que Postgres aún no tiene (ver sección 3).
-
-### `actions.ts`: qué se escribe y qué no
-
-`ProfileData` ahora incluye:
-
-```ts
-fellowship_graduated: boolean | null
-```
-
-No hay validación de “debe responderse”. `search_status` sigue siendo obligatorio para **todos** los `user_type` (check que ya existía).
-
-El payload común sigue siendo solo:
-
-- `search_status`
-- `user_type`
-- `profile_last_updated_at`
-
-`fellowship_graduated` se agrega **únicamente** en el `Object.assign` del branch `user_type === "seeker"`.
-
-Consecuencias:
-
-- Un seeker que busca trabajo persiste `true` / `false` / `null`.
-- Un founder o employed **no manda** esa columna. Si alguna vez fue seeker y había contestado, el valor previo **no se pisa**.
-- Los branches founder/employed no se modificaron: mismos campos `startup_*` / `employer_*`, mismas validaciones de nombre y rol.
-
-### `profile-form.tsx`
-
-- Estado `fellowshipGraduated: boolean | null`, inicializado desde `initialData`.
-- Card nueva **dentro** de `{flowType === "seeker" && searchStatus !== "not_looking"}`, después de Fortalezas. Los bloques founder/employed no se movieron.
-- Título de la primera card: `Estado de búsqueda *`. Descripción: `Obligatorio. ...`.
-- Si `validateForm` falla por falta de `searchStatus`, `scrollIntoView` a esa sección.
-- `buildProfileData()` arma el objeto una sola vez (submit + `ConfirmationView`). `ConfirmationView` no se editó; ignora campos que no renderiza.
+`?? null` (no `?? false`): “no respondió” no se convierte en “no se graduó”.
 
 ---
 
-## 3. Ajuste en Supabase (manual — hazlo tú)
+## 7. Código
 
-El código **no** crea la columna. Tienes que correr el SQL en el proyecto de Supabase **antes** de que un seeker guarde el formulario con este deploy. Si no, PostgREST devolverá un error del estilo “Could not find the `fellowship_graduated` column”.
+| Archivo | Rol |
+| --- | --- |
+| `app/perfil/[token]/actions.ts` | `updateProfile` (founder/employed). `updateSeekerSection(token, 1\|2\|3, data)` con allowlist. `ProfileData` incluye `fellowship_graduated`. |
+| `app/perfil/[token]/profile-form.tsx` | `seekerStep` 0–3, cards por página, Atrás/Siguiente, persist solo al avanzar. |
+| `app/perfil/[token]/page.tsx` | Hidrata `initialData`, incluido `fellowship_graduated`. |
+| `components/profile-progress-bar.tsx` | `%` igual; prop opcional `step` / `stepCount` a la derecha. |
+| `scripts/add_fellowship_graduated.sql` | Columna boolean nullable. Correr **a mano** en SQL Editor. |
+| Este documento | Spec. |
 
-### Por qué este SQL
+**No se tocan (a propósito):** dashboard, campañas, `confirmation-view.tsx`, RLS, env vars, `lib/supabase/*`.
 
-- Tipo `boolean`: `true` / `false` / `null`, como pidió el producto.
-- **Sin `NOT NULL` y sin `DEFAULT false`**: las filas actuales quedan en `null` (“aún no respondió”). Un default `false` marcaría a todo el histórico como “no graduado”.
-- `IF NOT EXISTS`: se puede correr más de una vez sin fallar.
-- La columna existe en **todas** las filas de `placements_makers`. Solo el flujo seeker del form la escribe por ahora.
+Auth de escritura: `service_role` + `.eq("magic_link_token", token)`. Sin filtro por `user_type` en el UPDATE: el token basta.
 
-### Dónde correrlo
+---
 
-1. Abre el [Dashboard de Supabase](https://supabase.com/dashboard) del proyecto de Placements.
-2. Ve a **SQL Editor**.
-3. Pega el contenido de `scripts/add_fellowship_graduated.sql` (también está abajo) y ejecútalo.
+## 8. SQL `fellowship_graduated` (manual)
+
+El app **no** crea la columna. Hay que correrlo en el SQL Editor de Supabase **antes** de que un seeker guarde la sección 3. Si no: error PostgREST “Could not find the `fellowship_graduated` column”. Founder/employed pueden guardar igual (no mandan esa columna). Siguiente de secciones 1–2 también (no la mandan).
 
 ```sql
 ALTER TABLE placements_makers
@@ -150,17 +191,11 @@ COMMENT ON COLUMN placements_makers.fellowship_graduated
   IS 'true = Maker graduado / completó el fellowship; false = no; null = no respondió';
 ```
 
-No hace falta cambiar RLS: `placements_makers` ya se lee/escribe con `service_role` y el filtro `.eq("magic_link_token", token)` en el form, igual que el resto de columnas del perfil.
+- Boolean nullable, **sin DEFAULT false** (el histórico no debe quedar como “no graduado”).
+- `IF NOT EXISTS`: se puede repetir.
+- RLS: sin cambios.
 
-### Cómo verificar que quedó bien
-
-En Supabase:
-
-1. **Table Editor** → tabla `placements_makers` → la columna `fellowship_graduated` aparece.
-2. Filas viejas: valor vacío / `null`.
-3. Después de que un seeker guarde “Sí” o “Aún no” desde su magic link, esa fila debe mostrar `true` o `false`.
-
-Opcional, en SQL Editor (solo lectura):
+Verificación:
 
 ```sql
 SELECT column_name, data_type, is_nullable, column_default
@@ -171,22 +206,19 @@ WHERE table_name = 'placements_makers'
 
 Esperado: `boolean`, nullable, sin default.
 
-### Orden recomendado
-
-1. Correr el SQL en Supabase.
-2. Confirmar la columna en Table Editor.
-3. Desplegar / usar el código de este cambio.
-4. Probar un magic link de seeker (con y sin responder la pregunta) y uno de founder/employed (el form debe guardar como siempre).
-
 ---
 
-## 4. Cómo probar el formulario (sin cambiar el dashboard)
+## 9. Cómo probar
 
-Usa un magic link real (`/perfil/<token>`):
+Magic link real en local:
 
-1. **Sin estado de búsqueda** (perfil vacío o borrando la selección no aplica; en un perfil nuevo): Guardar → no envía, scroll al error.
-2. **Seeker buscando / abierto a ofertas**: aparece la pregunta al final. Guardar sin tocarla → fila con `fellowship_graduated = null`. “Sí” → `true`. Recargar el link → sigue en “Sí”. “Aún no” → `false`. Clic otra vez en la misma opción → `null`.
-3. **No busco trabajo → founder**: no se ve la pregunta; “Guardar como founder” sigue pidiendo nombre y rol de la startup.
-4. **No busco trabajo → employed**: no se ve la pregunta; “Guardar como empleado” sigue pidiendo empresa y rol.
-
-Si el SQL aún no se corrió, los pasos 3 y 4 (founder/employed) siguen pudiendo guardar. El paso 2 (seeker) fallará en el UPDATE hasta que exista la columna.
+1. Paso 0 → seeking: sección 1 aparece **sin** Siguiente en la pregunta 1; la fila no cambia.
+2. Sección 1 vacía → Siguiente: solo esas columnas + status/type; `profile_last_updated_at` igual.
+3. Cerrar y reabrir: datos de sección 1; UI en sección 1.
+4. Atrás no escribe.
+5. Sección 2 → Siguiente: tools/ciudad/empresa/salario; no pisa sección 1 ni CV.
+6. Sección 3 → Guardar: timestamp, `cv_url`, fellowship, `ConfirmationView`.
+7. Save que falla: no avanza.
+8. “No busco” → founder/employed: una página, un guardado, sin “Paso X de 3”.
+9. Maker con datos previos: pills precargados; Next de una sección no vacía las otras.
+10. Fellowship: no tocar → `null`; “Sí” → `true`; recargar → sigue en “Sí”.
