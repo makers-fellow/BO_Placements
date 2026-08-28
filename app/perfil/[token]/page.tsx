@@ -78,6 +78,7 @@ export default async function ProfilePage({ params }: PageProps) {
             founder_role: maker.founder_role,
             employer_name: maker.employer_name,
             employer_role: maker.employer_role,
+            fellowship_graduated: maker.fellowship_graduated ?? null,
           }}
         />
       </div>
