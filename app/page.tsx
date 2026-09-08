@@ -15,6 +15,7 @@ export default async function HomePage() {
   let userStatus: 'pending' | 'approved' | 'rejected' | null = null
   let isAdmin = false
   let userEmail = ""
+  let userId = ""
 
   try {
     const supabase = await createClient()
@@ -24,6 +25,7 @@ export default async function HomePage() {
     
     if (user) {
       userEmail = user.email || ""
+      userId = user.id
       // Get dashboard user status
       const { data: dbUser } = await supabase
         .from('dashboard_users')
@@ -61,7 +63,7 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#0F1729]">
-      {userEmail && <Navbar userEmail={userEmail} isAdmin={isAdmin} />}
+      {userEmail && <Navbar userEmail={userEmail} isAdmin={isAdmin} userId={userId} />}
       <main className="py-8 px-4 md:px-8">
         <div className="max-w-[1600px] mx-auto">
           {/* Header */}

@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { AlertCircle, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import { register } from '../actions'
+import posthog from 'posthog-js'
 
 export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null)
@@ -24,6 +25,7 @@ export default function RegisterPage() {
       setError(result.error)
       setIsPending(false)
     } else if (result?.success) {
+      posthog.capture('user_registered')
       setIsSuccess(true)
       setIsPending(false)
     }

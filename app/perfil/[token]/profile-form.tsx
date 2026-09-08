@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useRef, useState, useTransition } from "react"
+import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,6 +17,7 @@ import {
 import { PillSelect, GroupedPillSelect } from "@/components/ui/pill-select"
 import { AlertCircle, Upload, X, FileText, Loader2 } from "lucide-react"
 import { updateProfile, updateSeekerSection, uploadCV, deleteCV, type ProfileData, type SeekerSection } from "./actions"
+import posthog from "posthog-js"
 import { ConfirmationView } from "./confirmation-view"
 import { ProfileProgressBar } from "@/components/profile-progress-bar"
 import { cn } from "@/lib/utils"
@@ -188,6 +189,11 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
       : 0
   )
 
+  // Identify the maker by their magic link token so profile events are associated
+  useEffect(() => {
+    posthog.identify(token)
+  }, [token])
+
   const isSeekerFlow = searchStatus === "actively_seeking" || searchStatus === "open_to_offers"
   const showSearchStatusCard = seekerStep <= 1
   const showSeekerSection1 = isSeekerFlow && seekerStep === 1
@@ -342,6 +348,7 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
     setIsUploading(false)
 
     if (result.success && result.url) {
+      posthog.capture('cv_uploaded')
       setCvUrl(result.url)
       setCvFileName(file.name)
     } else {
@@ -418,6 +425,7 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
       const result = await updateProfile(token, data)
 
       if (result.success) {
+        posthog.capture('profile_submitted', { flow_type: flowType, search_status: searchStatus })
         setSubmitted(true)
       } else {
         toast({
@@ -452,10 +460,12 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
       }
 
       if (section === 3) {
+        posthog.capture('profile_submitted', { flow_type: 'seeker', search_status: searchStatus, sections_completed: 3 })
         setSubmitted(true)
         return
       }
 
+      posthog.capture('profile_section_completed', { section_completed: section, next_section: section + 1, search_status: searchStatus })
       setSeekerStep((section + 1) as 1 | 2 | 3)
       window.scrollTo({ top: 0, behavior: "smooth" })
     })
@@ -465,6 +475,7 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
     setSearchStatus(status)
     setFlowType("seeker")
     setSeekerStep(1)
+    posthog.capture('profile_search_status_selected', { search_status: status, flow_type: 'seeker' })
   }
 
   if (submitted) {
@@ -552,6 +563,7 @@ export function ProfileForm({ token, firstName, initialData }: ProfileFormProps)
             onClick={() => {
               setSearchStatus("not_looking")
               setSeekerStep(0)
+              posthog.capture('profile_search_status_selected', { search_status: 'not_looking', flow_type: 'not_looking' })
             }}
             className={cn(
               "w-full flex flex-col items-start p-4 rounded-xl border-2 transition-all",
