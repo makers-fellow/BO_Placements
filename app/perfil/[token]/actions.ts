@@ -2,6 +2,7 @@
 
 import { createServiceClient } from "@/lib/supabase/service"
 import { CV_BUCKET, cvPathFromUrl } from "@/lib/supabase/storage"
+import { getPostHogClient } from "@/lib/posthog-server"
 
 export interface ProfileData {
   search_status: "actively_seeking" | "open_to_offers" | "not_looking"
@@ -70,6 +71,20 @@ async function persistMakerUpdate(
   if (!updatedRows || updatedRows.length === 0) {
     console.error(`[${logLabel}] No rows updated — possible RLS policy blocking the update or invalid token`)
     return { success: false, error: "No se pudo actualizar el perfil. Verifica que tu enlace sea válido." }
+  }
+
+  // Capture server-side profile update event
+  const posthog = getPostHogClient()
+  if (posthog) {
+    posthog.capture({
+      distinctId: token,
+      event: 'profile_updated',
+      properties: {
+        action: logLabel,
+        has_profile_timestamp: Boolean(updatePayload.profile_last_updated_at),
+      },
+    })
+    await posthog.flush()
   }
 
   return { success: true }

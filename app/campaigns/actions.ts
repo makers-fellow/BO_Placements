@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { revalidatePath } from 'next/cache'
 import { getKapsoClient, listApprovedTemplates, type KapsoTemplate } from '@/lib/kapso/client'
+import { getPostHogClient } from '@/lib/posthog-server'
 
 async function requireAdmin() {
   const supabase = await createClient()
@@ -121,6 +122,21 @@ export async function createCampaign({
   if (messagesInsertError) {
     await supabase.from('whatsapp_campaigns').update({ status: 'failed' }).eq('id', campaign.id)
     return { error: messagesInsertError.message }
+  }
+
+  // Capture server-side campaign creation event
+  const posthog = getPostHogClient()
+  if (posthog) {
+    posthog.capture({
+      distinctId: user.id,
+      event: 'campaign_created',
+      properties: {
+        recipient_count: makers.length,
+        template_name: templateName,
+        template_language: templateLanguage,
+      },
+    })
+    await posthog.flush()
   }
 
   return { campaignId: campaign.id as string, total: makers.length, batchSize: BATCH_SIZE }

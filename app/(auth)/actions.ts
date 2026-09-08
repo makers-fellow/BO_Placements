@@ -2,19 +2,31 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { getPostHogClient } from '@/lib/posthog-server'
 
 export async function login(formData: FormData) {
   const email = formData.get('email') as string
   const password = formData.get('password') as string
   const supabase = await createClient()
 
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password,
   })
 
   if (error) {
     return { error: error.message }
+  }
+
+  // Capture server-side login event
+  const posthog = getPostHogClient()
+  if (posthog && data.user?.id) {
+    posthog.capture({
+      distinctId: data.user.id,
+      event: 'user_logged_in',
+      properties: { source: 'email_password' },
+    })
+    await posthog.flush()
   }
 
   redirect('/')

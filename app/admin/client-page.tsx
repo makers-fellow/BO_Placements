@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { updateUserStatus } from './actions'
 import { useToast } from '@/hooks/use-toast'
 import { Check, X, Clock, ShieldAlert } from 'lucide-react'
+import posthog from 'posthog-js'
 
 export default function AdminPage({ users }: { users: any[] }) {
   const { toast } = useToast()
@@ -23,6 +24,7 @@ export default function AdminPage({ users }: { users: any[] }) {
         description: result.error
       })
     } else {
+      posthog.capture('admin_user_status_changed', { new_status: status })
       toast({
         title: 'Estado actualizado',
         description: `Usuario ha sido ${status === 'approved' ? 'aprobado' : 'rechazado'}`

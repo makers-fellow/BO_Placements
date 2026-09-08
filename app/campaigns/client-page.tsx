@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useToast } from '@/hooks/use-toast'
 import { getApprovedTemplates, createCampaign, sendCampaignBatch } from './actions'
+import posthog from 'posthog-js'
 import type { KapsoTemplate } from '@/lib/kapso/client'
 import {
   Send,
@@ -161,6 +162,12 @@ export default function CampaignsClientPage({
     setSending(true)
     setConfirmOpen(false)
 
+    // Capture campaign send confirmed event
+    posthog.capture('campaign_send_confirmed', {
+      recipient_count: selectedIds.size,
+      template_name: selectedTemplate.name,
+    })
+
     const created = (await createCampaign({
       name: `Recordatorio ${new Date().toLocaleDateString('es-ES')}`,
       templateName: selectedTemplate.name,
@@ -217,6 +224,14 @@ export default function CampaignsClientPage({
 
     setSending(false)
     setProgress(null)
+
+    // Capture campaign completion event
+    posthog.capture('campaign_send_completed', {
+      sent_count: sent,
+      failed_count: failed,
+      total: total,
+      template_name: selectedTemplate.name,
+    })
 
     toast({
       title: 'Campaña enviada',
